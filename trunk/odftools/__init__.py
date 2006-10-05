@@ -15,6 +15,7 @@ The utilities I have in mind are:
 
 """
 
+__add__ = [odf, diff, document]
 
 
 #EOF

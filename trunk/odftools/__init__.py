@@ -15,7 +15,7 @@ The utilities I have in mind are:
 
 """
 
-__add__ = [odf, diff, document]
+__all__ = [odf, diff, document]
 
 
 #EOF

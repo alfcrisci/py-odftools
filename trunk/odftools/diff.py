@@ -2,7 +2,8 @@
 
 
 
-
+import difflib
 import odf
 
 
+#EOF

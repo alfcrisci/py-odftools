@@ -17,16 +17,16 @@ class Document:
 
 	def __init__(self, 
 				 mimetype='',	# Mimetype string
-				 manifest='',	# Lists the contents of the ODF file
 				 content='',	# Content data (the text)
+				 manifest='',	# Lists the contents of the ODF file
 				 styles='',		# Formatting data 
 				 settings='',	# Use is specific to the application 
 				 meta='',		# Metadata
 				 **kwords		# Other files in META-INF
 				 ): 
 		self.mimetype = mimetype
-		self.manifest = dom.parseString(manifest)
 		self.content = dom.parseString(content)
+		self.manifest = dom.parseString(manifest)
 		self.styles = dom.parseString(styles)
 		self.settings = dom.parseString(settings)
 		self.meta = dom.parseString(meta)

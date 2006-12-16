@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# -*- coding: iso-8859-15 -*-
+#!/usr/bin/env python
 
 """ odf.py
 
@@ -7,12 +6,16 @@
 The full OASIS OpenDocument specification can be found here:
 http://www.oasis-open.org/specs/index.php#opendocumentv1.0
 
+These utilities will attempt to cover the lightweight portions of Rob Weir's
+proposal for an OpenDocument Developer's Kit:
+http://opendocument.xml.org/node/154
+
 
 Bob Sutor's Dr. ODF project/blog series (http://www.sutor.com)
 suggests the following features as examples:
 - Take an ODF document and throw away all formatting except the basic heading
-    and paragraph structure, printing what’s left on the screen. [toText]
-- Take an ODF word processing document and convert it to HTML. (Don’t forget
+    and paragraph structure, printing what's left on the screen. [toText]
+- Take an ODF word processing document and convert it to HTML. (Don't forget
     the images and tables!) [toHTML]
 - Extract all the elements of a given type (e.g. formulas, code) from an ODF
     document. [getElementsByType]
@@ -30,11 +33,6 @@ More ideas:
 - Templating system -- e.g. set up an interface for generating new documents
   with a predetermined look-and-feel, including headers, footers etc.
   Also have an interface for generating reports using this system
-
-See:
-  Proposal for an OpenDocument Developers Kit (ODDK)
-  http://opendocument.xml.org/node/154
-  https://www.linux-community.de/Neues/story?storyid=20964
 """
 
 import os
@@ -142,11 +140,16 @@ if __name__ == "__main__":
     for filename in os.listdir(os.getcwd()):
         if filename.rsplit('.').pop() in ['odt']:
             print "\n\nContents of %s:" % filename
-            print OdfToText(filename)
+            text = OdfToText(filename)
+            # before printing or writing to a file, unicode characters should be encoded properly
+            text = text.encode('latin_1', 'xmlcharrefreplace')
+            print text
+
             f = open("%s.html" % filename.rsplit('.',1)[0], 'w')
             html = OdfToHTML(filename)
-#            print html
-            f.write(html) # TODO: Fix UnicodeEncodeError
+            html = html.encode('latin_1', 'xmlcharrefreplace')
+            print html
+            f.write(html)
             f.close()
 
 #EOF

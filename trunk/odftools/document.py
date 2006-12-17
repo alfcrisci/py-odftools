@@ -14,8 +14,12 @@ import xml.dom.minidom as dom
 
 
 class Document:
-  """ The ODF document object. """
-  keys=['mimetype', 'content', 'manifest', 'styles', 'settings', 'meta']
+  """ The ODF document object."""
+
+  # map attribute names to file names
+  files={'mimetype': 'mimetype', 'content': 'content.xml', 'manifest':
+         'META-INF/manifest.xml', 'styles': 'styles.xml', 'settings':
+         'settings.xml', 'meta': 'meta.xml'}
 
   def __init__(self,
          mimetype='', # Mimetype string
@@ -27,20 +31,25 @@ class Document:
          **kwords   # Other files in META-INF
          ):
     args = locals()
-    for key in self.__class__.keys:
+    for key, filename in self.__class__.files.items():
       if key not in args or 0 == len(args[key]):
         setattr(self, key, '')
-      elif 'mimetype' == key:
+      elif not filename or '.xml' != filename[-4:]:
         setattr(self, key, args[key])
       else:
-        setattr(self, key, dom.parseString(args[key]))
+        try:
+          setattr(self, key, dom.parseString(args[key]))
+        except Exception, e:
+          print args[key]
+          print e
+
     #ENH: Handle **kwords
     # --- alternate route ---
     # self.Components = {}
 
   def __del__(self):
     """ Unlink each DOM component """
-    for key in self.__class__.keys:
+    for key in self.__class__.files:
       attr = getattr(self, key)
       if str != type(attr):
         attr.unlink()
@@ -48,9 +57,16 @@ class Document:
 
   # Extract objects from the document --------------------------------------
 
-  def getComponentAsString(self, component_name):
-    nodelist = self.__getattr__(component_name)
-    return nodelist.toprettyxml()
+  def getComponentAsString(self, component_name, pretty_printing=False):
+    if component_name not in self.__class__.files:
+      return ""
+    filename = self.__class__.files[component_name]
+    attr = getattr(self, component_name)
+    if str == type(attr):
+      return attr
+    if pretty_printing:
+      return attr.toprettyxml('utf-8')
+    return attr.toxml('utf-8')
 
 
   def getEmbeddedObjects(self, filter=None):
@@ -71,14 +87,20 @@ class Document:
 
   # Convert the document to other formats ---------------------------------
 
+  def toXml(self, pretty_printing=False):
+    """Return the content of the document as a XML string."""
+    if pretty_printing:
+      return self.content.toprettyxml('utf-8')
+    return self.content.toxml('utf-8')
+
   def toText(self):
-    """ Returns the content of the document as a plain-text string. """
+    """Return the content of the document as a plain-text string."""
     textlist = [node.data for node in doc_order_iter(self.content) if node.nodeType == node.TEXT_NODE]
     return "\n".join(textlist)
 
 
   def toHTML(self, title=""):
-    """ Returns an HTML representation of the document.
+    """Return an HTML representation of the document.
 
     The current version of this function is essentially the same as toText.
 

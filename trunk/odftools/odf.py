@@ -2,13 +2,12 @@
 
 """ odf.py
 
-
-The full OASIS OpenDocument specification can be found here:
-http://www.oasis-open.org/specs/index.php#opendocumentv1.0
-
 These utilities will attempt to cover the lightweight portions of Rob Weir's
 proposal for an OpenDocument Developer's Kit:
 http://opendocument.xml.org/node/154
+
+The full OASIS OpenDocument specification can be found here:
+http://www.oasis-open.org/specs/index.php#opendocumentv1.0
 
 
 Bob Sutor's Dr. ODF project/blog series (http://www.sutor.com)
@@ -45,75 +44,47 @@ class WriteException: pass
 class ReadException: pass
 
 
-# Map the names of the Zipped files to attributes of the Document object.
-g_Filenames = ("content.xml", "styles.xml", "meta.xml",
-   "settings.xml", "META-INF/manifest.xml")
-
-
-def _read(src):
-    """ Reads the contents of each of the files in archive src into obj. """
+# -----------------------------------------------------------------------------
+# Provide a Pickle-like interface for reading and writing.
+def Load(src):
+    """Return a Document object representing the contents of the OpenDocument file src."""
     zf = zipfile.ZipFile(src, 'r')
     names = zf.namelist()
-    #obj = Document()
     obj_dict = {}
-    for filename in g_Filenames:
+    for key, filename in Document.files.items():
         # Check that the filename is actually contained in this zip file
         if filename not in names:
             continue
-        component = filename.split('/')[-1].split('.')[0]
-        obj_dict[component] = zf.read(filename)
+        obj_dict[key] = zf.read(filename)
 #        print "Contents of component %s:" % filename ##########
-#        print obj_dict[component] ##########
+#        print obj_dict[key] ##########
     zf.close()
     obj = Document(**obj_dict)
     #print obj.__dict__
     return obj
 
 
-def _write(obj, dst):
-    """ Writes each of obj's attributes to a Zip file named dst.
+def Dump(document, dst):
+    """Write the ODF attributes of the document a Zip file named dst."""
 
-    Issue: If a file in the current working directory has the same name as
-    any of the keys in g_Filenames, an exception is thrown to prevent
-    overwriting the file. This is a kludge.
-    Better approaches:
-    - Create a temporary directory for this work (but what to name it?)
-    - Create these files in memory only (how do I do that?)
-    """
     zf = zipfile.ZipFile(dst, 'w')
 
-    for filename in g_Filenames:
-        if filename in os.listdir(os.getcwd()):
-            raise WriteException, "Naming conflict: %s already exists." % filename
-        f = open(filename, 'w')
-        f.write(obj.getComponentAsString(filename.split('.')[0]))
-        f.close()
-        zf.write(filename)
+    for key, filename in Document.files.items():
+        if filename:
+            zf.writestr(filename, document.getComponentAsString(key))
 
     zf.close()
-    #TODO: Clean up intermediate files
 
-
-
-# -----------------------------------------------------------------------------
-# Provides a Pickle-like interface for reading and writing.
-
-def Load(src):
-    return _read(src)
 
 def Loads(str):
     src = StringIO(str)
-    obj = _read(src)
+    obj = Load(src)
     src.close()
     return obj
 
-def Dump(obj, dst):
-    dst.write(_write(obj))
-    return
-
-def Dumps(obj):
+def Dumps(document):
     dst = StringIO()
-    dst.write(_write(obj))
+    dst.write(Dump(document))
     str = dst.getvalue()
     dst.close()
     return str
@@ -123,22 +94,67 @@ def Dumps(obj):
 # File format conversions
 
 def OdfToText(filename):
-  obj = _read(filename)
+  obj = Load(filename)
   return obj.toText()
 
-
 def OdfToHTML(filename, title=''):
-  obj = _read(filename)
+  obj = Load(filename)
   return obj.toHTML(title)
+
+def OdfToSqlite(filename):
+  """Return SQLite binary string of the zipped OpenDocument file."""
+  try:
+      from sqlite3 import dbapi2 as sqlite    # Python25
+  except ImportError:
+      from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
+  file = open(filename,'rb')
+  document = file.read()
+  file.close()
+  return sqlite.Binary(document)
+
+def SqlToOdf(blob, filename):
+  """Save the binary string blob containing a zipped OpenDocument into filename."""
+  file = open(filename,'wb')
+  file.write(blob)
+  file.close()
+
 
 
 # -----------------------------------------------------------------------------
 # Basic test script
 
 if __name__ == "__main__":
+    sqlite = None
+    try:
+        from sqlite3 import dbapi2 as sqlite    # Python25
+    except ImportError:
+        from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
+    except ImportError:
+        pass
+
+    if None != sqlite:
+      con = sqlite.connect('odf.sqlite') # ':memory:'
+      cur = con.cursor()
+      cur.execute("CREATE TABLE IF NOT EXISTS odf(id INTEGER PRIMARY KEY, name TEXT UNIQUE, document BLOB)")
 
     for filename in os.listdir(os.getcwd()):
-        if filename.rsplit('.').pop() in ['odt']:
+        if filename.rsplit('.', 1).pop() in ['odt','ods']:
+            if None != sqlite:
+              blobdata = OdfToSqlite(filename)
+
+              cur.execute("REPLACE INTO odf(name, document) VALUES (?, ?)",(filename, blobdata))
+              con.commit()
+
+              cur.execute("SELECT * FROM odf ORDER BY id DESC LIMIT 1")
+              document = cur.fetchone()
+              print 'Last database entry:', document
+
+              file = open('fetched_%i_%s' % (document[0], document[1]) , 'wb')
+              file.write(document[2])
+              file.close()
+
+              SqlToOdf(blobdata, 'fetched_%i_b_%s' % (document[0], document[1]))
+
             print "\n\nContents of %s:" % filename
             text = OdfToText(filename)
             # before printing or writing to a file, unicode characters should be encoded properly
@@ -151,5 +167,16 @@ if __name__ == "__main__":
             print html
             f.write(html)
             f.close()
+
+            document = Load(filename)
+            filename_splitted = filename.rsplit('.', 1);
+            Dump(document, filename_splitted[0] + '_dumped.' + filename_splitted[1])
+
+    if None != sqlite:
+      cur.execute("SELECT id, name FROM odf ORDER BY id")
+      documents = cur.fetchall()
+      cur.close()
+      con.close()
+      print len(documents), 'documents stored in database:', documents
 
 #EOF

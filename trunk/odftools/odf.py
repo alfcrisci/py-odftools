@@ -46,45 +46,50 @@ class ReadException: pass
 
 # -----------------------------------------------------------------------------
 # Provide a Pickle-like interface for reading and writing.
-def Load(src):
+def load(src):
     """Return a Document object representing the contents of the OpenDocument file src."""
     zf = zipfile.ZipFile(src, 'r')
     names = zf.namelist()
     obj_dict = {}
-    for key, filename in Document.files.items():
-        # Check that the filename is actually contained in this zip file
-        if filename not in names:
-            continue
-        obj_dict[key] = zf.read(filename)
-#        print "Contents of component %s:" % filename ##########
-#        print obj_dict[key] ##########
+    obj_dict["additional"] = {}
+    inverted=dict([(v,k) for k,v in Document.files.items()])
+    for filename in names:
+        # If the Zip entry is a special ODF file, store it with it's own attribute name
+        if filename in inverted:
+            obj_dict[inverted[filename]] = zf.read(filename)
+        else:
+            obj_dict["additional"][filename] = zf.read(filename)
     zf.close()
     obj = Document(**obj_dict)
-    #print obj.__dict__
     return obj
 
 
-def Dump(document, dst):
+def dump(document, dst):
     """Write the ODF attributes of the document a Zip file named dst."""
 
-    zf = zipfile.ZipFile(dst, 'w')
+    zf = zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED)
 
+    # Zip document attributes
     for key, filename in Document.files.items():
         if filename:
             zf.writestr(filename, document.getComponentAsString(key))
 
+    # Zip additional files
+    for filename, content in document.additional.items():
+        zf.writestr(filename, content)
+
     zf.close()
 
 
-def Loads(str):
+def loads(str):
     src = StringIO(str)
-    obj = Load(src)
+    obj = load(src)
     src.close()
     return obj
 
-def Dumps(document):
+def dumps(document):
     dst = StringIO()
-    dst.write(Dump(document))
+    dst.write(dump(document))
     str = dst.getvalue()
     dst.close()
     return str
@@ -94,11 +99,11 @@ def Dumps(document):
 # File format conversions
 
 def OdfToText(filename):
-  obj = Load(filename)
+  obj = load(filename)
   return obj.toText()
 
 def OdfToHTML(filename, title=''):
-  obj = Load(filename)
+  obj = load(filename)
   return obj.toHTML(title)
 
 def OdfToSqlite(filename):
@@ -168,9 +173,9 @@ if __name__ == "__main__":
             f.write(html)
             f.close()
 
-            document = Load(filename)
+            document = load(filename)
             filename_splitted = filename.rsplit('.', 1);
-            Dump(document, filename_splitted[0] + '_dumped.' + filename_splitted[1])
+            dump(document, filename_splitted[0] + '_dumped.' + filename_splitted[1])
 
     if None != sqlite:
       cur.execute("SELECT id, name FROM odf ORDER BY id")

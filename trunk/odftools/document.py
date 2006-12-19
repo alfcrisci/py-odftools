@@ -22,15 +22,20 @@ class Document:
          'settings.xml', 'meta': 'meta.xml'}
 
   def __init__(self,
-         mimetype='', # Mimetype string
-         content='',  # Content data (the text)
-         manifest='', # Lists the contents of the ODF file
-         styles='',   # Formatting data
-         settings='', # Use is specific to the application
-         meta='',   # Metadata
-         **kwords   # Other files in META-INF
+         mimetype='',   # Mimetype string
+         content='',    # Content data (the text)
+         manifest='',   # Lists the contents of the ODF file
+         styles='',     # Formatting data
+         settings='',   # Use is specific to the application
+         meta='',       # Metadata
+         additional={}, # additional files (i.e. images)
+         **kwords       # Other files in META-INF
          ):
+
+    # Get all method parameters
     args = locals()
+
+    # Process all Document files
     for key, filename in self.__class__.files.items():
       if key not in args or 0 == len(args[key]):
         setattr(self, key, '')
@@ -42,6 +47,11 @@ class Document:
         except Exception, e:
           print args[key]
           print e
+
+    # Store additional files
+    self.additional = {}
+    for filename, content in args["additional"].items():
+        self.additional[filename] = content
 
     #ENH: Handle **kwords
     # --- alternate route ---

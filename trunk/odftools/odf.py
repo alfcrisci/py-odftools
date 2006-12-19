@@ -98,9 +98,9 @@ def dumps(document):
 # -----------------------------------------------------------------------------
 # File format conversions
 
-def OdfToText(filename):
+def OdfToText(filename, skip_blank_lines=True):
   obj = load(filename)
-  return obj.toText()
+  return obj.toText(skip_blank_lines)
 
 def OdfToHTML(filename, title=''):
   obj = load(filename)
@@ -117,8 +117,13 @@ def OdfToSqlite(filename):
   file.close()
   return sqlite.Binary(document)
 
-def SqlToOdf(blob, filename):
-  """Save the binary string blob containing a zipped OpenDocument into filename."""
+def SqlToOdf(blob, filename=None):
+  """Save the binary string blob containing a zipped OpenDocument into filename.
+  Return a corresponding Document if filename is None."""
+
+  if filename is None:
+    return loads(blob)
+
   file = open(filename,'wb')
   file.write(blob)
   file.close()
@@ -174,6 +179,17 @@ if __name__ == "__main__":
             f.close()
 
             document = load(filename)
+
+            images = document.getEmbeddedObjects()
+            if 0 != len(images):
+              image = images.keys()[0]
+              print image, ':', len(images[image])
+
+            for filename, content in images.items():
+              f = open(filename, 'wb')
+              f.write(content)
+              f.close()
+
             filename_splitted = filename.rsplit('.', 1);
             dump(document, filename_splitted[0] + '_dumped.' + filename_splitted[1])
 

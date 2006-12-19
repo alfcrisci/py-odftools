@@ -86,7 +86,9 @@ class Document:
     all embedded objects; the list/dictionary can also be filtered
     for a certain type, e.g. image files.
     """
-    pass
+    # TODO: support other embedded objects and filter
+    return dict([(filename[9:], content) for filename, content in self.additional.items() if 'Pictures/' == filename[:9]])
+
 
   def getElementsByType(self, elementtype):
     """ Extract all elements of a given type from the document.
@@ -103,9 +105,9 @@ class Document:
       return self.content.toprettyxml('utf-8')
     return self.content.toxml('utf-8')
 
-  def toText(self):
+  def toText(self, skip_blank_lines=True):
     """Return the content of the document as a plain-text string."""
-    textlist = [node.data for node in doc_order_iter(self.content) if node.nodeType == node.TEXT_NODE]
+    textlist = [node.data for node in doc_order_iter(self.content) if node.nodeType == node.TEXT_NODE and (not skip_blank_lines or 0 != len(node.data.strip()))]
     return "\n".join(textlist)
 
 

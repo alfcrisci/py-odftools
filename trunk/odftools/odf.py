@@ -180,7 +180,17 @@ if __name__ == "__main__":
 
             document = load(filename)
 
+            document.replace('e', 'TEST')
+            f = open('replaced.txt', 'w')
+            f.write(document.toText().encode('latin_1', 'xmlcharrefreplace'))
+            f.close()
+
             images = document.getEmbeddedObjects()
+            print document.getEmbeddedObjects(1).keys()
+            print document.getEmbeddedObjects('10*E*.png').keys()
+            print document.getEmbeddedObjects('*?.gif').keys()
+            print document.getEmbeddedObjects('*\\.png').keys()
+            print document.getEmbeddedObjects('.*\\.png').keys()
             if 0 != len(images):
               image = images.keys()[0]
               print image, ':', len(images[image])

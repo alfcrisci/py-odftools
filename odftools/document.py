@@ -85,9 +85,30 @@ class Document:
     A more general form of getImages. By default, this should return
     all embedded objects; the list/dictionary can also be filtered
     for a certain type, e.g. image files.
+
+    The filter currently supports UNIX glob patterns like "*abc?.png"
+    and correct regular expressions like ".*abc.\.png".
     """
-    # TODO: support other embedded objects and filter
-    return dict([(filename[9:], content) for filename, content in self.additional.items() if 'Pictures/' == filename[:9]])
+
+    # TODO: support other embedded objects
+    if filter:
+      import re, sre_constants
+      try:
+        match = re.search(r'^(.*[^\\])\.(\w+)', filter)
+        if match:
+          match = match.groups()
+          s = match[0].replace('*', '.*').replace('?', '.') + '\\.' + match[1]
+          print s
+          find = re.compile(s).search
+        else:
+          find = re.compile(filter).search
+        search = lambda x: find(x)
+      except (sre_constants.error, TypeError), v:
+        print 'Warning: could not compile regular expression:', v
+        search = lambda x: False
+    else:
+      search = lambda x: True
+    return dict([(filename[9:], content) for filename, content in self.additional.items() if 'Pictures/' == filename[:9] and search(filename[9:])])
 
 
   def getElementsByType(self, elementtype):
@@ -96,6 +117,7 @@ class Document:
     For example, formulas or code.
     """
     pass
+
 
   # Convert the document to other formats ---------------------------------
 
@@ -109,7 +131,6 @@ class Document:
     """Return the content of the document as a plain-text string."""
     textlist = [node.data for node in doc_order_iter(self.content) if node.nodeType == node.TEXT_NODE and (not skip_blank_lines or 0 != len(node.data.strip()))]
     return "\n".join(textlist)
-
 
   def toHTML(self, title=""):
     """Return an HTML representation of the document.
@@ -144,6 +165,29 @@ class Document:
     htmlTemplate = f.read()
     f.close()
     return htmlTemplate % values
+
+  def replace(self, search, replace):
+    """Replace all occurences of search in content by replace.
+    Regular expressions are supported."""
+
+    if not search:
+      return
+    import re, sre_constants
+    try:
+      _replace = re.compile(search).sub
+      search = lambda x, y: find(x, y)
+
+    except (sre_constants.error, TypeError), v:
+      print 'Warning: could not compile regular expression:', v
+      return
+    for node in doc_order_iter(self.content):
+      if node.nodeType == node.TEXT_NODE and node.data:
+        try:
+          node.data = _replace(replace, node.data)
+        except (sre_constants.error, TypeError), v:
+          print 'Warning: could not compile regular expression:', v
+          return
+
 
 
 # http://www-128.ibm.com/developerworks/library/x-tipgenr.html

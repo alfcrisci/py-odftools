@@ -1,0 +1,56 @@
+#summary The to-do list for this project.
+#labels Phase-Requirements
+
+== To Fix ==
+
+_If the problem is specific, consider using the issues tracking system._
+
+
+== To Add ==
+
+*Unit tests for:*
+  * Plain text output
+  * HTML output
+  * SQLite load/dump
+  * SQlite regex selection & other SQL operations
+  * Pickle load/dump
+  * Regex seletion of embedded objects
+
+
+*Formatting for ToHTML:*
+  * Document-defined styles
+  * Embedded objects
+  * Tables
+ 
+
+*Diff*
+  * In the future, re-implement "track changes" as a diff patch to be included in the ODF file.
+
+
+*Document templating system*
+  * e.g. set up an interface for generating new documents with a predetermined set of styles, including headers, footers etc.
+  * Also have an interface for generating reports using this system.
+
+
+*Nice to have:*
+  * Determine document type (in case of wrong filename extension).
+  * Clean up styles: If two or more styles have the same attributes, pick one name for all of them and delete the other styles.
+
+
+*Bob Sutor suggests:*
+  * Iterate over a directory of ODF files and print how many of them were authored by a given person. (list file ownership in a friendly format)
+
+
+== To Change ==
+
+
+== Links ==
+
+  * Rob Weir's proposal for an OpenDocument Developer's Kit: [http://opendocument.xml.org/node/154]
+
+  * Bob Sutor's Dr. ODF project/blog series: [http://www.sutor.com/newsite/blog-open/?cat=93]
+
+
+
+
+

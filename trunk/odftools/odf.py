@@ -40,8 +40,8 @@ from cStringIO import StringIO
 
 from document import *
 
-class WriteException: pass
-class ReadException: pass
+class WriteError(Exception): pass
+class ReadError(Exception): pass
 
 
 # -----------------------------------------------------------------------------
@@ -52,6 +52,8 @@ def load(src):
     names = zf.namelist()
     obj_dict = {}
     obj_dict["additional"] = {}
+    if str == type(src) and len(src) < 1000 and os.path.isfile(src):
+      obj_dict["file"] = src
     inverted=dict([(v,k) for k,v in Document.files.items()])
     for filename in names:
         # If the Zip entry is a special ODF file, store it with it's own attribute name
@@ -64,7 +66,7 @@ def load(src):
     return obj
 
 
-def dump(document, dst):
+def dump(doc, dst):
     """Write the ODF attributes of the document a Zip file named dst."""
 
     zf = zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED)
@@ -72,10 +74,10 @@ def dump(document, dst):
     # Zip document attributes
     for key, filename in Document.files.items():
         if filename:
-            zf.writestr(filename, document.getComponentAsString(key))
+            zf.writestr(filename, doc.getComponentAsString(key))
 
     # Zip additional files
-    for filename, content in document.additional.items():
+    for filename, content in doc.additional.items():
         zf.writestr(filename, content)
 
     zf.close()
@@ -87,9 +89,9 @@ def loads(str):
     src.close()
     return obj
 
-def dumps(document):
+def dumps(doc):
     dst = StringIO()
-    dst.write(dump(document))
+    dump(doc, dst)
     str = dst.getvalue()
     dst.close()
     return str
@@ -113,9 +115,9 @@ def OdfToSqlite(filename):
   except ImportError:
       from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
   file = open(filename,'rb')
-  document = file.read()
+  doc = file.read()
   file.close()
-  return sqlite.Binary(document)
+  return sqlite.Binary(doc)
 
 def SqlToOdf(blob, filename=None):
   """Save the binary string blob containing a zipped OpenDocument into filename.
@@ -131,83 +133,11 @@ def SqlToOdf(blob, filename=None):
 
 
 # -----------------------------------------------------------------------------
-# Basic test script
+# Commmand line processing
 
 if __name__ == "__main__":
-    sqlite = None
-    try:
-        from sqlite3 import dbapi2 as sqlite    # Python25
-    except ImportError:
-        from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
-    except ImportError:
-        pass
+    from optparse import OptionParser
+    # TODO: define and process command line parameters
 
-    if None != sqlite:
-      con = sqlite.connect('odf.sqlite') # ':memory:'
-      cur = con.cursor()
-      cur.execute("CREATE TABLE IF NOT EXISTS odf(id INTEGER PRIMARY KEY, name TEXT UNIQUE, document BLOB)")
-
-    for filename in os.listdir(os.getcwd()):
-        if filename.rsplit('.', 1).pop() in ['odt','ods']:
-            if None != sqlite:
-              blobdata = OdfToSqlite(filename)
-
-              cur.execute("REPLACE INTO odf(name, document) VALUES (?, ?)",(filename, blobdata))
-              con.commit()
-
-              cur.execute("SELECT * FROM odf ORDER BY id DESC LIMIT 1")
-              document = cur.fetchone()
-              print 'Last database entry:', document
-
-              file = open('fetched_%i_%s' % (document[0], document[1]) , 'wb')
-              file.write(document[2])
-              file.close()
-
-              SqlToOdf(blobdata, 'fetched_%i_b_%s' % (document[0], document[1]))
-
-            print "\n\nContents of %s:" % filename
-            text = OdfToText(filename)
-            # before printing or writing to a file, unicode characters should be encoded properly
-            text = text.encode('latin_1', 'xmlcharrefreplace')
-            print text
-
-            f = open("%s.html" % filename.rsplit('.',1)[0], 'w')
-            html = OdfToHTML(filename)
-            html = html.encode('latin_1', 'xmlcharrefreplace')
-            print html
-            f.write(html)
-            f.close()
-
-            document = load(filename)
-
-            document.replace('e', 'TEST')
-            f = open('replaced.txt', 'w')
-            f.write(document.toText().encode('latin_1', 'xmlcharrefreplace'))
-            f.close()
-
-            images = document.getEmbeddedObjects()
-            print document.getEmbeddedObjects(1).keys()
-            print document.getEmbeddedObjects('10*E*.png').keys()
-            print document.getEmbeddedObjects('*?.gif').keys()
-            print document.getEmbeddedObjects('*\\.png').keys()
-            print document.getEmbeddedObjects('.*\\.png').keys()
-            if 0 != len(images):
-              image = images.keys()[0]
-              print image, ':', len(images[image])
-
-            for filename, content in images.items():
-              f = open(filename, 'wb')
-              f.write(content)
-              f.close()
-
-            filename_splitted = filename.rsplit('.', 1);
-            dump(document, filename_splitted[0] + '_dumped.' + filename_splitted[1])
-
-    if None != sqlite:
-      cur.execute("SELECT id, name FROM odf ORDER BY id")
-      documents = cur.fetchall()
-      cur.close()
-      con.close()
-      print len(documents), 'documents stored in database:', documents
 
 #EOF

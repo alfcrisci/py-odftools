@@ -13,6 +13,9 @@ should do.
 import xml.dom.minidom as dom
 
 
+class ReCompileError(Exception): pass
+
+
 class Document:
   """ The ODF document object."""
 
@@ -22,6 +25,7 @@ class Document:
          'settings.xml', 'meta': 'meta.xml'}
 
   def __init__(self,
+         file='',       # Document file name
          mimetype='',   # Mimetype string
          content='',    # Content data (the text)
          manifest='',   # Lists the contents of the ODF file
@@ -52,6 +56,9 @@ class Document:
     self.additional = {}
     for filename, content in args["additional"].items():
         self.additional[filename] = content
+
+    if not hasattr(self, 'file'):
+      self.file = None
 
     #ENH: Handle **kwords
     # --- alternate route ---
@@ -98,14 +105,14 @@ class Document:
         if match:
           match = match.groups()
           s = match[0].replace('*', '.*').replace('?', '.') + '\\.' + match[1]
-          print s
           find = re.compile(s).search
         else:
           find = re.compile(filter).search
         search = lambda x: find(x)
       except (sre_constants.error, TypeError), v:
-        print 'Warning: could not compile regular expression:', v
-        search = lambda x: False
+        # print 'Warning: could not compile regular expression:', v
+        # search = lambda x: False
+        raise ReCompileError(v)
     else:
       search = lambda x: True
     return dict([(filename[9:], content) for filename, content in self.additional.items() if 'Pictures/' == filename[:9] and search(filename[9:])])

@@ -8,28 +8,38 @@ _If the problem is specific, consider using the issues tracking system._
 
 == To Add ==
 
-*Unit tests for:*
-  * Plain text output
-  * HTML output
-  * SQLite load/dump
-  * SQlite regex selection & other SQL operations
-  * Pickle load/dump
-  * Regex seletion of embedded objects
+
+*Command line*
+  * Define and process command line parameters.
 
 
-*Formatting for ToHTML:*
+*HTML output:*
   * Document-defined styles
+    * The body will be nodes of the form: 
+      {{{
+      "<%s class="%s" id="%s">%s</%s>" % (tag, class, id, content, tag)
+      }}}
+    * The stylesheet in the header will be extracted from `styles.xml` -- this is more complicated, and might require a reference table for translating ODF XML to CSS.
+    * The tag names are a little arbitrary, but should be selected sensibly at some point so that the HTML output looks reasonable with CSS disabled.
   * Embedded objects
   * Tables
- 
+
+
+*HTML input:*
+  * Convert a single HTML page to an ODF text document.
+  * ENH: Accept a list of HTML pages as arguments.
+  * ENH: Follow stylesheet links and convert CSS to ODF styles.
+
 
 *Diff*
-  * In the future, re-implement "track changes" as a diff patch to be included in the ODF file.
+  * See [http://freshmeat.net/projects/xmldiff/ Xmldiff]
+  * Per-word diffing of `contents.xml` from each file is a good place to start; `styles.xml` is also worthwhile. The user should be able to select which components are included in the diff operation beween ODF files. 
+  * ENH: Re-implement "track changes" as a diff patch to be included in the ODF file.
 
 
 *Document templating system*
   * e.g. set up an interface for generating new documents with a predetermined set of styles, including headers, footers etc.
-  * Also have an interface for generating reports using this system.
+  * Also make an interface for generating reports using this system.
 
 
 *Nice to have:*
@@ -41,7 +51,9 @@ _If the problem is specific, consider using the issues tracking system._
   * Iterate over a directory of ODF files and print how many of them were authored by a given person. (list file ownership in a friendly format)
 
 
-== To Change ==
+*Unit tests:*
+  * As needed, for new features.
+
 
 
 == Links ==
@@ -49,6 +61,13 @@ _If the problem is specific, consider using the issues tracking system._
   * Rob Weir's proposal for an OpenDocument Developer's Kit: [http://opendocument.xml.org/node/154]
 
   * Bob Sutor's Dr. ODF project/blog series: [http://www.sutor.com/newsite/blog-open/?cat=93]
+
+
+
+
+
+
+
 
 
 

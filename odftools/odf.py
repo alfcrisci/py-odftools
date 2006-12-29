@@ -138,7 +138,7 @@ def SqlToOdf(blob, filename=None):
 if __name__ == "__main__":
     from optparse import OptionParser
     usage = "usage: %prog [options] [files to process]"
-    parser = OptionParser(usage, version="%prog " + odftools.__version__)
+    parser = OptionParser(usage)
 
     parser.add_option("-f", "--file", dest="filename",
                       help="write to output FILE", metavar="FILE")

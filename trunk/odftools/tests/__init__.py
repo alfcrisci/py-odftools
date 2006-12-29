@@ -18,9 +18,16 @@ import unittest, os, sys, shutil, tempfile
 
 # wd = os.getcwd()
 # if os.path.dirname(__file__) != wd:
-#  os.chdir(
-#     sys.path.append('..')
+#   os.chdir()
+# sys.path.append('..')
 td = os.path.dirname(os.path.abspath(__file__))
+if td[-5:] != 'tests':
+    td += os.path.sep + 'tests'
+    td_prefix = 'tests.'
+elif os.getcwd()[-5:] != 'tests':
+    td_prefix = 'tests.'
+else:
+    td_prefix = ''
 sys.path.append(os.path.dirname(td))
 
 import odf, document, diff
@@ -72,10 +79,9 @@ class TestCaseOdfImages(TestCaseOdftools):
 
 
 def test_suite():
-    import os, sys, re
-    path = os.path.abspath(os.path.dirname(sys.argv[0]))
+    import re
     test = re.compile("^test.*\.py$", re.IGNORECASE)
-    modules = [__import__(os.path.splitext(file)[0]) for file in os.listdir(path) if test.search(file)]
+    modules = [__import__(td_prefix + file[:-3], globals(), locals(), ' ') for file in os.listdir(td) if test.search(file)]
     return unittest.TestSuite(map(unittest.defaultTestLoader.loadTestsFromModule, modules))
 
 def run_tests():

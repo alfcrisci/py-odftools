@@ -10,6 +10,7 @@ make sense to use the bulkier xml.dom or pyxml, but for now, this
 should do.
 """
 
+import os
 import xml.dom.minidom as dom
 
 
@@ -168,7 +169,7 @@ class Document:
     values["styles"] = "" # TODO
 
     # Apply values to the HTML template
-    f = open("template.html", 'r')
+    f = open(os.path.dirname(__file__) + "/template.html", 'r')
     htmlTemplate = f.read()
     f.close()
     return htmlTemplate % values

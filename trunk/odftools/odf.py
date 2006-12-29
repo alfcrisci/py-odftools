@@ -137,7 +137,33 @@ def SqlToOdf(blob, filename=None):
 
 if __name__ == "__main__":
     from optparse import OptionParser
-    # TODO: define and process command line parameters
+    usage = "usage: %prog [options] [files to process]"
+    parser = OptionParser(usage, version="%prog " + odftools.__version__)
+
+    parser.add_option("-f", "--file", dest="filename",
+                      help="write to output FILE", metavar="FILE")
+    parser.add_option("-q", "--quiet",
+                      action="store_false", dest="quiet", default=False,
+                      help="don't print status messages to stdout")
+    parser.add_option("-t", "--selftest",
+                      action="store_true", dest="selftest", default=False,
+                      help="run test suite")
+    parser.add_option("-v", "--verbose",
+                      action="store_true", dest="verbose", default=False,
+                      help="verbose status messages")
+
+    (options, args) = parser.parse_args()
+
+    if options.selftest:
+        import unittest, tests
+        if options.verbose: verbosity = 2
+        elif options.quiet: verbosity = 0
+        else: verbosity = 1
+        testrunner = unittest.TextTestRunner(verbosity=verbosity)
+        testrunner.run(tests.test_suite())
+
+    elif 0 is len(args):
+        parser.print_help()
 
 
 #EOF

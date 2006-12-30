@@ -38,7 +38,7 @@ class TestCaseText(TestCaseOdfText):
 
     def test_html(self):
         doc = odf.load(self.file)
-        html = doc.toHTML()
+        html = doc.toHtml()
         self.assertTrue('<p>' + self.__class__.sentence + '</p>' in html)
 
     def test_replace(self):

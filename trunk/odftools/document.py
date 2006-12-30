@@ -69,7 +69,7 @@ class Document:
     """ Unlink each DOM component """
     for key in self.__class__.files:
       attr = getattr(self, key)
-      if str != type(attr):
+      if not isinstance(attr, basestring):
         attr.unlink()
 
 
@@ -80,7 +80,7 @@ class Document:
       return ""
     filename = self.__class__.files[component_name]
     attr = getattr(self, component_name)
-    if str == type(attr):
+    if isinstance(attr, basestring):
       return attr
     if pretty_printing:
       return attr.toprettyxml('utf-8')
@@ -140,7 +140,7 @@ class Document:
     textlist = [node.data for node in doc_order_iter(self.content) if node.nodeType == node.TEXT_NODE and (not skip_blank_lines or 0 != len(node.data.strip()))]
     return "\n".join(textlist)
 
-  def toHTML(self, title=""):
+  def toHtml(self, title=""):
     """Return an HTML representation of the document.
 
     The current version of this function is essentially the same as toText.

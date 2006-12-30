@@ -15,7 +15,7 @@ suggests the following features as examples:
 - Take an ODF document and throw away all formatting except the basic heading
     and paragraph structure, printing what's left on the screen. [toText]
 - Take an ODF word processing document and convert it to HTML. (Don't forget
-    the images and tables!) [toHTML]
+    the images and tables!) [toHtml]
 - Extract all the elements of a given type (e.g. formulas, code) from an ODF
     document. [getElementsByType]
 - Take an ODF document and extract any images/objects embedded in it.
@@ -52,7 +52,7 @@ def load(src):
     names = zf.namelist()
     obj_dict = {}
     obj_dict["additional"] = {}
-    if str == type(src) and len(src) < 1000 and os.path.isfile(src):
+    if isinstance(src, basestring) and len(src) < 1000 and os.path.isfile(src):
       obj_dict["file"] = src
     inverted=dict([(v,k) for k,v in Document.files.items()])
     for filename in names:
@@ -104,9 +104,9 @@ def OdfToText(filename, skip_blank_lines=True):
   obj = load(filename)
   return obj.toText(skip_blank_lines)
 
-def OdfToHTML(filename, title=''):
+def OdfToHtml(filename, title=''):
   obj = load(filename)
-  return obj.toHTML(title)
+  return obj.toHtml(title)
 
 def OdfToSqlite(filename):
   """Return SQLite binary string of the zipped OpenDocument file."""
@@ -137,33 +137,79 @@ def SqlToOdf(blob, filename=None):
 
 if __name__ == "__main__":
     from optparse import OptionParser
-    usage = "usage: %prog [options] [files to process]"
+    usage = "Usage: %prog [options] [files to process]\n\nAttention: if options"
+    usage += " -f, -o and --toxxx are not given, the input file will be "
+    usage += "overwritten!"
     parser = OptionParser(usage)
 
     parser.add_option("-f", "--file", dest="filename",
                       help="write to output FILE", metavar="FILE")
-    parser.add_option("-q", "--quiet",
-                      action="store_false", dest="quiet", default=False,
+    parser.add_option("-o", "--stdout", dest="stdout", action="store_true",
+                      help="write to stdout instead of output FILE")
+    parser.add_option("-q", "--quiet", dest="quiet", action="store_true",
                       help="don't print status messages to stdout")
-    parser.add_option("-t", "--selftest",
-                      action="store_true", dest="selftest", default=False,
+    parser.add_option("-r", "--replace", dest="replace", nargs=2,
+                      metavar="SEARCH REPLACE",
+                      help="replace search string by replacement string")
+    parser.add_option("-t", "--selftest", dest="selftest", action="store_true",
                       help="run test suite")
-    parser.add_option("-v", "--verbose",
-                      action="store_true", dest="verbose", default=False,
+    parser.add_option("--tohtml", dest="tohtml", action="store_true",
+                      help="convert document to HTML")
+    parser.add_option("--totext", dest="totext", action="store_true",
+                      help="convert document to text")
+    parser.add_option("--toxml", dest="toxml", action="store_true",
+                      help="convert document to XML")
+    parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                       help="verbose status messages")
 
     (options, args) = parser.parse_args()
 
+    if options.verbose: verbosity = 2
+    elif options.quiet: verbosity = 0
+    else: verbosity = 1
+
     if options.selftest:
         import unittest, tests
-        if options.verbose: verbosity = 2
-        elif options.quiet: verbosity = 0
-        else: verbosity = 1
         testrunner = unittest.TextTestRunner(verbosity=verbosity)
         testrunner.run(tests.test_suite())
 
     elif 0 is len(args):
         parser.print_help()
 
+    else:
+        if os.path.isfile(args[0]):
+            import sys
+
+            infile = args[0]
+
+            doc = load(infile)
+            output = ''
+            output_odf = False
+
+            if options.replace:
+              doc.replace(options.replace[0], options.replace[1])
+
+            if options.totext:
+                output = doc.toText().encode('latin_1', 'xmlcharrefreplace')
+            elif options.tohtml:
+                output = doc.toHtml().encode('latin_1', 'xmlcharrefreplace')
+            elif options.toxml:
+                output = doc.toXml().encode('latin_1', 'xmlcharrefreplace')
+            elif options.replace:
+                output = dumps(doc)
+                output_odf = True
+
+            if output:
+                if options.filename:
+                    outfile = open(options.filename, 'w')
+                elif options.stdout:
+                    outfile = sys.stdout
+                elif output_odf:
+                    outfile = open(infile, 'wb')
+                else:
+                    sys.exit("Warning: cannot overwrite input file with text content")
+
+                outfile.write(output)
+                outfile.close()
 
 #EOF

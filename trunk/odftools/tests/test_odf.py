@@ -109,8 +109,8 @@ class TestCaseImages(TestCaseOdfImages):
         self.assertEqual(len(doc.getEmbeddedObjects('1')), 2)
         self.assertEqual(len(doc.getEmbeddedObjects('10*F.gif')), 1)
         self.assertEqual(len(doc.getEmbeddedObjects('*?.gif')), 1)
-        self.assertRaises(document.ReCompileError, doc.getEmbeddedObjects, '*\\.png')
-        self.assertEqual(len(doc.getEmbeddedObjects('10.*D.*\\.png')), 1)
+        self.assertRaises(document.ReCompileError, doc.getEmbeddedObjects, r'*\.png')
+        self.assertEqual(len(doc.getEmbeddedObjects(r'10.*D.*\.png')), 1)
 
 
 

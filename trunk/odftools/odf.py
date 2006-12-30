@@ -137,13 +137,17 @@ def SqlToOdf(blob, filename=None):
 
 if __name__ == "__main__":
     from optparse import OptionParser
-    usage = "Usage: %prog [options] [files to process]\n\nAttention: if options"
-    usage += " -f, -o and --toxxx are not given, the input file will be "
-    usage += "overwritten!"
+    usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n\nAttention:\nIf options"
+    usage += " -f, -o and --toxxx are not given and data was changed, the input file will be "
+    usage += "overwritten!\nIf -f is given, the output file will be overwritten for every input file."
     parser = OptionParser(usage)
 
+    parser.add_option("-d", "--directory", dest="directory",
+                      help="read from DIRECTORY [separate filter with / or \\]", metavar="DIRECTORY")
     parser.add_option("-f", "--file", dest="filename",
                       help="write to output FILE", metavar="FILE")
+    parser.add_option("--list-authors", dest="list_author", action="store_true",
+                      help="print a list of authors for all input files")
     parser.add_option("-o", "--stdout", dest="stdout", action="store_true",
                       help="write to stdout instead of output FILE")
     parser.add_option("-q", "--quiet", dest="quiet", action="store_true",
@@ -161,6 +165,8 @@ if __name__ == "__main__":
                       help="convert document to XML")
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                       help="verbose status messages")
+    # TODO: options.recurse
+    # TODO: options.case_insensitive_file_search
 
     (options, args) = parser.parse_args()
 
@@ -168,26 +174,44 @@ if __name__ == "__main__":
     elif options.quiet: verbosity = 0
     else: verbosity = 1
 
+    filter = ''
+    files = []
+    if options.directory is not None:
+        path, filter = get_path_and_filter(options.directory)
+        # path *must* contain a directory, otherwise no files will be added
+        files.extend(list_directory(path, filter, True))
+
+    for arg in args:
+        if os.path.isfile(arg):
+            files.append(arg)
+        else:
+            path, filter = get_path_and_filter(arg)
+            files.extend(list_directory(path, filter))
+
+    files = unique(files)
+
     if options.selftest:
         import unittest, tests
         testrunner = unittest.TextTestRunner(verbosity=verbosity)
         testrunner.run(tests.test_suite())
 
-    elif 0 is len(args):
+    elif len(files) == 0:
         parser.print_help()
 
     else:
-        if os.path.isfile(args[0]):
-            import sys
-
-            infile = args[0]
-
+        import sys
+        authors = {}
+        files = sorted(files)
+        for infile in files:
+            if verbosity == 2:
+                print 'Processing', infile
             doc = load(infile)
             output = ''
             output_odf = False
+            changed = False
 
             if options.replace:
-              doc.replace(options.replace[0], options.replace[1])
+              changed = doc.replace(options.replace[0], options.replace[1])
 
             if options.totext:
                 output = doc.toText().encode('latin_1', 'xmlcharrefreplace')
@@ -195,6 +219,12 @@ if __name__ == "__main__":
                 output = doc.toHtml().encode('latin_1', 'xmlcharrefreplace')
             elif options.toxml:
                 output = doc.toXml().encode('latin_1', 'xmlcharrefreplace')
+            elif options.list_author:
+                author = doc.getAuthor()
+                if author:
+                    if not authors.has_key(author):
+                        authors[author] = []
+                    authors[author].append(infile)
             elif options.replace:
                 output = dumps(doc)
                 output_odf = True
@@ -205,11 +235,33 @@ if __name__ == "__main__":
                 elif options.stdout:
                     outfile = sys.stdout
                 elif output_odf:
+                    if not changed:
+                        continue
                     outfile = open(infile, 'wb')
                 else:
-                    sys.exit("Warning: cannot overwrite input file with text content")
+                    sys.exit("Warning: cannot overwrite input files with text content")
 
                 outfile.write(output)
+                if not outfile == sys.stdout:
+                    outfile.close()
+
+        output = ''
+        for author in sorted(authors.keys()):
+            output += 'Author ' + author + ":\n"
+            for file in authors[author]:
+                output += file + "\n"
+            output += "\n"
+
+        if output:
+            if options.filename:
+                outfile = open(options.filename, 'w')
+            elif options.stdout:
+                outfile = sys.stdout
+            else:
+                sys.exit("Warning: cannot overwrite input files with text content")
+
+            outfile.write(output.encode('latin_1', 'xmlcharrefreplace'))
+            if not outfile == sys.stdout:
                 outfile.close()
 
 #EOF

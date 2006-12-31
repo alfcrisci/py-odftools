@@ -4,7 +4,7 @@ import unittest, os, sys, shutil, tempfile
 # if os.path.dirname(__file__) != wd:
 #   os.chdir()
 # sys.path.append('..')
-td = os.path.dirname(os.path.abspath(__file__))
+td = unicode(os.path.dirname(os.path.abspath(__file__)))
 if td[-5:] != 'tests':
     td += os.path.sep + 'tests'
     td_prefix = 'tests.'

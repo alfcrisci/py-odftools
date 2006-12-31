@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: iso-8859-15 -*-
 
 """ odf.py
 
@@ -35,20 +36,38 @@ More ideas:
 """
 
 import os
-import zipfile
-from cStringIO import StringIO
 
 from document import *
 
-class WriteError(Exception): pass
-class ReadError(Exception): pass
+
+class WriteError(Exception):
+  """Thrown if unable to write output."""
+  pass
+
+class ReadError(Exception):
+  """Thrown if unable to read input."""
+  pass
 
 
 # -----------------------------------------------------------------------------
 # Provide a Pickle-like interface for reading and writing.
 def load(src):
-    """Return a Document object representing the contents of the OpenDocument file src."""
+    """Return a Document representing the contents of the ODF file src."""
+
+    import zipfile
     zf = zipfile.ZipFile(src, 'r')
+# TODO: read previously written ODF files which contained Unicode characters
+# http://mail.python.org/pipermail/python-list/2006-January/363102.html
+#    except zipfile.BadZipfile:
+#      original = open(src, 'rb')
+#      try:
+#         data = original.read()
+#      finally:
+#        original.close()
+#      position = data.rindex(zipfile.stringEndArchive, -(22 + 0), -20)
+#      import cStringIO
+#      coredata = cStringIO.StringIO(data[: 22 + position])
+#      zf = zipfile.ZipFile(coredata)
     names = zf.namelist()
     obj_dict = {}
     obj_dict["additional"] = {}
@@ -69,12 +88,13 @@ def load(src):
 def dump(doc, dst):
     """Write the ODF attributes of the document a Zip file named dst."""
 
+    import zipfile
     zf = zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED)
 
     # Zip document attributes
     for key, filename in Document.files.items():
         if filename:
-            zf.writestr(filename, doc.getComponentAsString(key))
+            zf.writestr(filename, doc.getComponentAsString(key, encoding='utf-8'))
 
     # Zip additional files
     for filename, content in doc.additional.items():
@@ -84,12 +104,14 @@ def dump(doc, dst):
 
 
 def loads(str):
+    from cStringIO import StringIO
     src = StringIO(str)
     obj = load(src)
     src.close()
     return obj
 
 def dumps(doc):
+    from cStringIO import StringIO
     dst = StringIO()
     dump(doc, dst)
     str = dst.getvalue()
@@ -137,15 +159,22 @@ def SqlToOdf(blob, filename=None):
 
 if __name__ == "__main__":
     from optparse import OptionParser
-    usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n\nAttention:\nIf options"
-    usage += " -f, -o and --toxxx are not given and data was changed, the input file will be "
-    usage += "overwritten!\nIf -f is given, the output file will be overwritten for every input file."
+    usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n"\
+            "\nAttention:\nIf option --force is given and data was changed "\
+            "or converted, existing files will be overwritten!\nIf document "\
+            "data was changed, the input file will be overwritten."
     parser = OptionParser(usage)
 
     parser.add_option("-d", "--directory", dest="directory",
-                      help="read from DIRECTORY [separate filter with / or \\]", metavar="DIRECTORY")
+                      metavar="DIRECTORY", help=
+                      "read from DIRECTORY [separate filter with / or \\]",)
     parser.add_option("-f", "--file", dest="filename",
                       help="write to output FILE", metavar="FILE")
+    parser.add_option("--filename-append", dest="filename_append",
+                      action="store_true",
+                      help="append an extension to each output FILE")
+    parser.add_option("--force", dest="force", action="store_true",
+                      help="force overwriting of output FILE")
     parser.add_option("--list-authors", dest="list_author", action="store_true",
                       help="print a list of authors for all input files")
     parser.add_option("-o", "--stdout", dest="stdout", action="store_true",
@@ -155,7 +184,7 @@ if __name__ == "__main__":
     parser.add_option("-r", "--replace", dest="replace", nargs=2,
                       metavar="SEARCH REPLACE",
                       help="replace search string by replacement string")
-    parser.add_option("-t", "--selftest", dest="selftest", action="store_true",
+    parser.add_option("--selftest", dest="selftest", action="store_true",
                       help="run test suite")
     parser.add_option("--tohtml", dest="tohtml", action="store_true",
                       help="convert document to HTML")
@@ -165,10 +194,26 @@ if __name__ == "__main__":
                       help="convert document to XML")
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                       help="verbose status messages")
+
+    # TODO: options.pipe
+    # TODO: options.output_directory # Maybe just change --directory ?
     # TODO: options.recurse
     # TODO: options.case_insensitive_file_search
+    # TODO: options.encoding
 
-    (options, args) = parser.parse_args()
+    import sys, codecs
+
+    # Encoding der Standardausgabe und des Dateisystems herausfinden
+    # http://wiki.python.de/Von_Umlauten%2C_Unicode_und_Encodings
+    # sys.getdefaultencoding()
+    stdout_encoding = sys.stdout.encoding or sys.getfilesystemencoding()
+    fs_encoding = sys.getfilesystemencoding()
+    encoding = 'iso8859_15'
+
+    # Decode all parameters to Unicode before parsing
+    sys.argv = [s.decode(fs_encoding) for s in sys.argv]
+
+    options, args = parser.parse_args()
 
     if options.verbose: verbosity = 2
     elif options.quiet: verbosity = 0
@@ -177,91 +222,153 @@ if __name__ == "__main__":
     filter = ''
     files = []
     if options.directory is not None:
+      try:
         path, filter = get_path_and_filter(options.directory)
+      except PathNotFoundError, e:
+        if verbosity == 2:
+          print_unicode(sys.stderr, u'Warning: Skipping input directory "' +
+                        options.directory + '":' + str(e), encoding)
+      else:
         # path *must* contain a directory, otherwise no files will be added
         files.extend(list_directory(path, filter, True))
 
     for arg in args:
-        if os.path.isfile(arg):
-            files.append(arg)
+      if os.path.isfile(arg):
+        files.append(arg)
+      else:
+        try:
+          path, filter = get_path_and_filter(arg)
+        except PathNotFoundError, e:
+          if verbosity == 2:
+            print_unicode(sys.stderr, u'Warning: Skipping input file "' + arg +
+                          '":' + str(e), encoding)
         else:
-            path, filter = get_path_and_filter(arg)
-            files.extend(list_directory(path, filter))
+          files.extend(list_directory(path, filter))
 
     files = unique(files)
 
     if options.selftest:
-        import unittest, tests
-        testrunner = unittest.TextTestRunner(verbosity=verbosity)
-        testrunner.run(tests.test_suite())
+      import unittest, tests
+      testrunner = unittest.TextTestRunner(verbosity=verbosity)
+      testrunner.run(tests.test_suite())
 
     elif len(files) == 0:
-        parser.print_help()
+      parser.print_help()
 
     else:
-        import sys
+      try:
         authors = {}
         files = sorted(files)
+        import zipfile
         for infile in files:
-            if verbosity == 2:
-                print 'Processing', infile
+          if verbosity == 2:
+            print_unicode(sys.stdout, u'Processing ' + infile, encoding)
+
+          try:
             doc = load(infile)
-            output = ''
-            output_odf = False
-            changed = False
+          except zipfile.BadZipfile, e:
+            print_unicode(sys.stderr, u'Warning: Skipping input file "' +
+                          infile + '": ' + str(e), encoding)
+            continue
 
-            if options.replace:
-              changed = doc.replace(options.replace[0], options.replace[1])
+          content = {}
+          changed = False
 
-            if options.totext:
-                output = doc.toText().encode('latin_1', 'xmlcharrefreplace')
-            elif options.tohtml:
-                output = doc.toHtml().encode('latin_1', 'xmlcharrefreplace')
-            elif options.toxml:
-                output = doc.toXml().encode('latin_1', 'xmlcharrefreplace')
-            elif options.list_author:
-                author = doc.getAuthor()
-                if author:
-                    if not authors.has_key(author):
-                        authors[author] = []
-                    authors[author].append(infile)
-            elif options.replace:
-                output = dumps(doc)
-                output_odf = True
+          if options.replace:
+            changed = doc.replace(options.replace[0], options.replace[1])
 
-            if output:
+          if options.totext:
+            content['txt'] = doc.toText()
+          if options.tohtml:
+            content['html'] = doc.toHtml(os.path.basename(infile))
+          if options.toxml:
+            content['xml'] = doc.toXml(encoding='utf-8')
+          if options.replace and changed:
+            content['odf'] = dumps(doc)
+          if options.list_author:
+            author = doc.getAuthor()
+            if author:
+              if not authors.has_key(author):
+                authors[author] = []
+              authors[author].append(infile)
+
+          if content:
+              for extension, output in content.items():
+                filename = infile
+                output_encoding = ''
+
                 if options.filename:
-                    outfile = open(options.filename, 'w')
-                elif options.stdout:
-                    outfile = sys.stdout
-                elif output_odf:
-                    if not changed:
-                        continue
-                    outfile = open(infile, 'wb')
+                  filename = options.filename
+                if options.filename_append:
+                  if 'odf' == extension:
+                    filename += u'.' + infile.split('.')[-1]
+                  else:
+                    filename += u'.' + unicode(extension)
+
+                if not options.force and os.path.isfile(filename):
+                  print_unicode(sys.stderr, u'Warning: Skipping already '
+                                + u'existing output file "' + filename + u'"',
+                                encoding)
+                  continue
+
+                if extension in ['xml','html']:
+                  outfile = open(filename, 'w')
+                  output_encoding = 'utf-8'
+                elif extension == 'odf':
+                  outfile = open(filename, 'wb')
                 else:
-                    sys.exit("Warning: cannot overwrite input files with text content")
+                  outfile = codecs.open(filename, 'w', encoding, 'replace')
 
-                outfile.write(output)
-                if not outfile == sys.stdout:
-                    outfile.close()
+                if verbosity == 2:
+                  print_unicode(sys.stdout,
+                                u'Writing ' + extension + u' to ' + filename,
+                                encoding)
 
-        output = ''
+                try:
+                  print >>outfile, output
+                finally:
+                  outfile.close()
+
+                # TODO: allow ODF output to stdout with --pipe
+                if options.stdout and extension != 'odf':
+                  print_unicode(sys.stdout, output, encoding, output_encoding)
+
+        content = []
         for author in sorted(authors.keys()):
-            output += 'Author ' + author + ":\n"
-            for file in authors[author]:
-                output += file + "\n"
-            output += "\n"
+          content.append(u'Author ' + author + u':')
+          for file in authors[author]:
+            content.append(file)
+        output = u"\n".join(content)
 
         if output:
+          if options.filename or options.filename_append:
+            filename = infile
             if options.filename:
-                outfile = open(options.filename, 'w')
-            elif options.stdout:
-                outfile = sys.stdout
-            else:
-                sys.exit("Warning: cannot overwrite input files with text content")
+              filename = options.filename
+            if options.filename_append:
+              filename += u'.txt'
 
-            outfile.write(output.encode('latin_1', 'xmlcharrefreplace'))
-            if not outfile == sys.stdout:
-                outfile.close()
+            if not options.force and os.path.isfile(filename):
+              print_unicode(sys.stderr,
+                            u'Warning: Skipping already existing output'\
+                                  u' file "' + filename + u'"', encoding)
+            else:
+              if verbosity == 2:
+                print_unicode(sys.stdout,
+                              u'Writing author list to ' + filename, encoding)
+              outfile = codecs.open(filename, 'w', encoding, 'replace')
+              outfile.write(output)
+              outfile.close()
+
+          if options.stdout:
+            print_unicode(sys.stdout, output, encoding)
+
+      except UnicodeError, e:
+        if unicode == type(e.object):
+          import unicodedata
+          print e, ' -> character name: "' + unicodedata.name(e.object[e.start]) + '"'
+        else:
+          print e, ' -> character: "' + e.object[e.start] + '"'
+        raise
 
 #EOF

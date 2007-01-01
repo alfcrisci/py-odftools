@@ -13,12 +13,14 @@ should do.
 import os
 import xml.dom.minidom as dom
 
+
 # Prefix values with "application/vnd.oasis.opendocument." to get MIME types
 odf_formats = {'odt':'text', 'ods':'spreadsheet', 'odp':'presentation',
                'odg':'graphics', 'odc':'chart', 'odf':'formula', 'odi':'image',
                'odm':'text-master', 'ott':'text-template',
                'ots':'spreadsheet-template', 'otp':'presentation-template',
                'otg':'graphics-template'}
+
 
 class ReCompileError(Exception):
   """Thrown if regular expression is not compilable."""
@@ -108,8 +110,8 @@ class Document:
     all embedded objects; the list/dictionary can also be filtered
     for a certain type, e.g. image files.
 
-    The filter currently supports UNIX glob patterns like "*abc?.png"
-    and correct regular expressions like ".*abc.\.png".
+    The filter currently supports UNIX glob patterns like "*a[bc]?.png"
+    and/or correct regular expressions like ".*a[bc].\.png$".
     """
 
     # TODO: support other embedded objects
@@ -230,13 +232,12 @@ def get_search_for_filter(filter):
     if filter:
         import re, sre_constants
         try:
-            if not r'\.' in filter and [c for c in '*?.' if c in filter]:
+            if is_glob(filter):
                 s = filter.replace('.', r'\.').replace('*', '.*').replace('?', '.')
                 if filter[0] != '*':
                     s = '^' + s
                 if filter[-1] != '*':
                     s += '$'
-
                 find = re.compile(s).search
             else:
                 find = re.compile(filter).search
@@ -251,7 +252,12 @@ def get_search_for_filter(filter):
     return search
 
 
-def list_directory(directory, filter=None, must_be_directory=False, recurse=False):
+def is_glob(filter):
+  """Return True if filter contains a glob expression, False otherwise."""
+  return not r'\.' in filter and [c for c in '*[]?.' if c in filter]
+
+
+def list_directory(directory, filter=None, recursive=False, must_be_directory=False):
     """Scan a directory for ODF files."""
 
     directory = get_win_root_directory(directory)
@@ -276,10 +282,16 @@ def list_directory(directory, filter=None, must_be_directory=False, recurse=Fals
     odf_extensions = r".*\.(?:" + "|".join(odf_formats.keys()) + ")$"
     search_odf = get_search_for_filter(odf_extensions)
 
-    files = [prefix + file for file in os.listdir(unicode(directory))
-             if search_user(file) and search_odf(file)]
+    found_files = []
+    for root, dirs, files in os.walk(unicode(directory)):
+        files = [directory == '.' and os.path.join(root, f)[2:] or
+                 os.path.join(root, f) for f in files if search_user(f) and
+                 search_odf(f)]
+        found_files.extend(files)
+        if not recursive:
+          del dirs[:]
 
-    return files
+    return found_files
 
 
 def get_path_and_filter(directory, test_existence=True):
@@ -287,7 +299,11 @@ def get_path_and_filter(directory, test_existence=True):
 
     path = ''
     filter = ''
-    if test_existence and os.path.isdir(directory):
+
+    if len(directory) == 1 and directory[0] in r"\/":
+      path = os.path.sep
+
+    elif test_existence and os.path.isdir(directory):
         path = directory
         if path[-1] in r"\/":
             path = path[:-1]
@@ -303,6 +319,10 @@ def get_path_and_filter(directory, test_existence=True):
         # TODO: allow directory globbing "test*/*.odt"
         if len(splitted) == 2:
             if test_existence and not os.path.isdir(first_directory):
+                test_regex = directory.replace(r'\.', '.')
+                splitted = search_path_separator.split(test_regex, 1)
+                if len(splitted) == 1:
+                    return ('', directory)
                 raise PathNotFoundError('Path does not exist: ' + first_directory)
             if first_directory != os.path.sep:
                 path += splitted[0]

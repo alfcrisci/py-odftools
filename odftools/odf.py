@@ -250,43 +250,42 @@ def process_command_line():
   """Handle command-line arguments."""
 
   from optparse import OptionParser
-  usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n"
+  usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n\n"
   usage += __doc__.replace("\n  ", "\n") # etal20070102: Why replace()?
   parser = OptionParser(usage)
 
-  parser.add_option("-d", "--directory", dest="directory",
-                    metavar="DIRECTORY", help=
-                    "write all output files to DIRECTORY")
-  parser.add_option("-f", "--file", dest="filename",
-                    help="write to output FILE", metavar="FILE")
+  parser.add_option("-d", "--directory", dest="directory", metavar="DIRECTORY", 
+                    help="Write all output files to DIRECTORY.")
+  parser.add_option("-f", "--file", dest="filename", metavar="FILE",
+                    help="Write to output FILE.")
   parser.add_option("--filename-append", dest="filename_append",
                     action="store_true",
-                    help="append an extension to each output FILE")
+                    help="Append an extension to each output FILE.")
   parser.add_option("--force", dest="force", action="store_true",
-                    help="force overwriting of output FILE")
+                    help="Force overwriting of output FILE.")
   parser.add_option("--list-authors", dest="list_author", action="store_true",
-                    help="print a list of authors for all input files")
+                    help="Print a list of authors for all input files.")
   parser.add_option("-o", "--stdout", dest="stdout", action="store_true",
-                    help="write to stdout instead of output FILE")
+                    help="Write to stdout instead of output FILE.")
   parser.add_option("-q", "--quiet", dest="quiet", action="store_true",
-                    help="don't print status messages to stdout")
+                    help="Don't print status messages to stdout.")
   parser.add_option("-r", "--replace", dest="replace", nargs=2,
                     metavar="SEARCH REPLACE",
-                    help="replace search string by replacement string")
+                    help="Replace search string by replacement string.")
   parser.add_option("--recursive", dest="recursive", action="store_true",
-                    help="search directories recursively")
+                    help="Search directories recursively.")
   parser.add_option("--selftest", dest="selftest", action="store_true",
-                    help="run test suite")
+                    help="Run the test suite.")
   parser.add_option("--tohtml", dest="tohtml", action="store_true",
-                    help="convert document to HTML")
+                    help="Convert the document to HTML.")
   parser.add_option("--toodf", dest="toodf", action="store_true",
-                    help="convert document to ODF")
+                    help="Convert the document to ODF.")
   parser.add_option("--totext", dest="totext", action="store_true",
-                    help="convert document to text")
+                    help="Convert the document to plain text.")
   parser.add_option("--toxml", dest="toxml", action="store_true",
-                    help="convert document to XML")
+                    help="Convert the document to XML.")
   parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
-                    help="verbose status messages")
+                    help="Print verbose status messages.")
 
   # TODO: options.stdin
   # TODO: options.pipe
@@ -468,6 +467,7 @@ def process_command_line():
 
     if output:
       # TODO: maybe set a default output file name like list_authors.txt?
+      # Shouldn't stdout be the default? '>' and '|' already exist as tools.
       if options.filename:
         filename = options.filename
         if options.filename_append:

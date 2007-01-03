@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 
-"""document
-
-The document object, for containing the document in memory and to be used as
-the intermediate step for all operations.
+""" The document object, for containing the document in memory 
+and to be used as the intermediate step for all operations.
 
 This implementation relies on minidom for handling the object. It may later
 make sense to use the bulkier xml.dom or pyxml, but for now, this
 should do.
+
 """
 
 import os
@@ -23,212 +22,227 @@ odf_formats = {'odt':'text', 'ods':'spreadsheet', 'odp':'presentation',
 
 
 class ReCompileError(Exception):
-  """Thrown if regular expression is not compilable."""
-  pass
+    """Thrown if regular expression is not compilable."""
+    pass
 
 class PathNotFoundError(Exception):
-  """Thrown if a file reference contains a non-existing path."""
-  pass
-
-
-class Document:
-  """The ODF document object."""
-
-  # map attribute names to file names
-  files={'mimetype': 'mimetype', 'content': 'content.xml', 'manifest':
-         'META-INF/manifest.xml', 'styles': 'styles.xml', 'settings':
-         'settings.xml', 'meta': 'meta.xml'}
-
-  def __init__(self,
-         file='',       # Document file name
-         mimetype='',   # Mimetype string
-         content='',    # Content data (the text)
-         manifest='',   # Lists the contents of the ODF file
-         styles='',     # Formatting data
-         settings='',   # Use is specific to the application
-         meta='',       # Metadata
-         additional={}, # additional files (i.e. images)
-         **kwords       # Other files in META-INF
-         ):
-
-    # Get all method parameters
-    args = locals()
-
-    # Process all Document files
-    for key, filename in self.__class__.files.items():
-      if key not in args or 0 == len(args[key]):
-        setattr(self, key, '')
-      elif not filename or '.xml' != filename[-4:]:
-        setattr(self, key, args[key])
-      else:
-        try:
-          setattr(self, key, dom.parseString(args[key]))
-        except Exception, e:
-          print args[key]
-          print e
-
-    # Store additional files
-    self.additional = {}
-    for filename, content in args["additional"].items():
-        self.additional[filename] = content
-
-    if not hasattr(self, 'file'):
-      self.file = None
-
-    #ENH: Handle **kwords
-    # --- alternate route ---
-    # self.Components = {}
-
-  def __del__(self):
-    """Unlink each DOM component."""
-    for key in self.__class__.files:
-      attr = getattr(self, key)
-      if not isinstance(attr, basestring):
-        attr.unlink()
-
-
-  # Extract objects from the document --------------------------------------
-
-  def getComponentAsString(self, component_name, pretty_printing=False,
-                           encoding=None):
-    """Return document component as Unicode string."""
-    if component_name not in self.__class__.files:
-      return ""
-    filename = self.__class__.files[component_name]
-    attr = getattr(self, component_name)
-    if isinstance(attr, basestring):
-      return attr
-    if pretty_printing:
-      return attr.toprettyxml(encoding)
-    return attr.toxml(encoding)
-
-
-  def getEmbeddedObjects(self, filter=None):
-    """Return a dictionary of the objects embedded in the document.
-
-    A more general form of getImages. By default, this should return
-    all embedded objects; the list/dictionary can also be filtered
-    for a certain type, e.g. image files.
-
-    The filter currently supports UNIX glob patterns like "*a[bc]?.png"
-    and/or correct regular expressions like ".*a[bc].\.png$".
-    """
-
-    # TODO: support other embedded objects
-    search = get_search_for_filter(filter)
-    return dict([(filename[9:], content) for filename, content in self.additional.items() if 'Pictures/' == filename[:9] and search(filename[9:])])
-
-
-  def getElementsByType(self, elementtype):
-    """Extract all elements of a given type from the document.
-
-    For example, formulas or code.
-    """
+    """Thrown if a file reference contains a non-existing path."""
     pass
 
 
-  def getAuthor(self):
-    """Return the author of this document if available."""
+class Document:
+    """The ODF document object."""
 
-    author = ''
-    if self.meta:
-      for node in self.meta.getElementsByTagName("dc:creator"):
-        if (node.firstChild.nodeType == node.TEXT_NODE) and node.firstChild.data:
-          author = node.firstChild.data
-          break
+    # map attribute names to file names
+    files={'mimetype': 'mimetype', 'content': 'content.xml', 'manifest':
+            'META-INF/manifest.xml', 'styles': 'styles.xml', 'settings':
+            'settings.xml', 'meta': 'meta.xml'}
 
-    return author
+    def __init__(self,
+            file='',       # Document file name
+            mimetype='',   # Mimetype string
+            content='',    # Content data (the text)
+            manifest='',   # Lists the contents of the ODF file
+            styles='',     # Formatting data
+            settings='',   # Use is specific to the application
+            meta='',       # Metadata
+            additional={}, # additional files (i.e. images)
+            **kwords       # Other files in META-INF
+            ):
+
+        # Get all method parameters
+        args = locals()
+
+        # Process all Document files
+        for key, filename in self.__class__.files.items():
+            if key not in args or 0 == len(args[key]):
+                setattr(self, key, '')
+            elif not filename or '.xml' != filename[-4:]:
+                setattr(self, key, args[key])
+            else:
+                try:
+                    setattr(self, key, dom.parseString(args[key]))
+                except Exception, e:
+                    print args[key]
+                    print e
+
+        # Store additional files
+        self.additional = {}
+        for filename, content in args["additional"].items():
+            self.additional[filename] = content
+
+        if not hasattr(self, 'file'):
+            self.file = None
 
 
-  # Convert the document to other formats ---------------------------------
+    def __del__(self):
+        """Unlink each DOM component."""
+        for key in self.__class__.files:
+            attr = getattr(self, key)
+            if not isinstance(attr, basestring):
+                attr.unlink()
 
-  def toXml(self, pretty_printing=False, encoding=None):
-    """Return the content of the document as a XML Unicode string."""
-    if pretty_printing:
-      return self.content.toprettyxml(encoding)
-    return self.content.toxml(encoding)
 
-  def toText(self, skip_blank_lines=True):
-    """Return the content of the document as a plain-text Unicode string."""
-    textlist = [node.data for node in doc_order_iter(self.content) if node.nodeType == node.TEXT_NODE and (not skip_blank_lines or 0 != len(node.data.strip()))]
-    return u"\n".join(textlist)
+    # Extract objects from the document
 
-  def toHtml(self, title=""): # , encoding=None
-    """Return an UTF-8 encoded HTML representation of the document.
+    def getComponentAsString(self, component_name, pretty_printing=False,
+                            encoding=None):
+        """Return document component as Unicode string."""
+        if component_name not in self.__class__.files:
+            return ""
+        filename = self.__class__.files[component_name]
+        attr = getattr(self, component_name)
+        if isinstance(attr, basestring):
+            return attr
+        if pretty_printing:
+            return attr.toprettyxml(encoding)
+        return attr.toxml(encoding)
 
-    The current version of this function is essentially the same as toText.
 
-    The next version should:
-    - Create a stylesheet in the header
-    - Apply corresponding style classes to each node
+    def getEmbeddedObjects(self, filter=None):
+        """Return a dictionary of the objects embedded in the document.
 
-    After that, this function should also handle:
-    - hyperlinks
-    - images
-    - tables
-    """
-    values = {}
+        A more general form of getImages. By default, this should return
+        all embedded objects; the list/dictionary can also be filtered
+        for a certain type, e.g. image files.
 
-    import codecs
-    # TODO: Support other encodings than UTF-8, and maybe Unicode
-    encoding = 'utf-8'
-    values["title"] = unicode(title).encode(encoding) # Title for the page, if applicable
-    bodyList = [] # the lines to insert into the body of the document
-    # Not implemented yet:
-    metaList = []   # Meta tags for the header
-    styleList = []  # Stylesheet elements
+        The filter currently supports UNIX glob patterns like "*a[bc]?.png"
+        and/or correct regular expressions like ".*a[bc].\.png$".
+        """
 
-    # Extract the body of the HTML document
-    htmllist = ["<p>%s</p>" % node.data.encode(encoding) for node in doc_order_iter(self.content) if node.nodeType == node.TEXT_NODE]
-    values["body"] = "\n".join(htmllist)
+        # TODO: support other embedded objects
+        search = get_search_for_filter(filter)
+        return dict([(filename[9:], content) 
+                    for filename, content in self.additional.items() 
+                    if 'Pictures/' == filename[:9] 
+                    and search(filename[9:])])
 
-    values["meta"] = "" # TODO
-    values["styles"] = "" # TODO
 
-    # Apply values to the HTML template
-    f = codecs.open(os.path.dirname(__file__) + "/template.html", 'r', encoding, 'xmlcharrefreplace')
-    htmlTemplate = f.read()
-    f.close()
+    def getElementsByType(self, elementtype):
+        """Extract all elements of a given type from the document.
 
-    htmlTemplate = htmlTemplate.encode(encoding)
+        For example, formulas or code.
 
-    return htmlTemplate % values
+        """
+        pass
 
-  def replace(self, search, replace):
-    """Replace all occurences of search in content by replace.
-    Regular expressions are fully supported for search and replace."""
 
-    if not search:
-        return 0
-    import re, sre_constants
-    try:
-        _replace = re.compile(search).sub
-        search = lambda x, y: find(x, y)
+    def getAuthor(self):
+        """Return the author of this document if available."""
 
-    except (sre_constants.error, TypeError), v:
-        print 'Warning: could not compile regular expression:', v
-        return 0
-    count = 0
-    for node in doc_order_iter(self.content):
-        if node.nodeType == node.TEXT_NODE and node.data:
-            try:
-                replaced = _replace(replace, node.data)
-                if replaced != node.data:
-                  node.data = replaced
-                  count += 1
-            except (sre_constants.error, TypeError), v:
-                print 'Warning: could not compile regular expression:', v
-                return 0
-    return count
+        author = ''
+        if self.meta:
+            for node in self.meta.getElementsByTagName("dc:creator"):
+                if (node.firstChild.nodeType == node.TEXT_NODE) and node.firstChild.data:
+                    author = node.firstChild.data
+                    break
 
+        return author
+
+
+    # Convert the document to other formats
+
+    def toXml(self, pretty_printing=False, encoding=None):
+        """Return the content of the document as a XML Unicode string."""
+
+        if pretty_printing:
+            return self.content.toprettyxml(encoding)
+        return self.content.toxml(encoding)
+
+
+    def toText(self, skip_blank_lines=True):
+        """Return the content of the document as a plain-text Unicode string."""
+        textlist = [node.data for node in doc_order_iter(self.content) 
+                    if node.nodeType == node.TEXT_NODE 
+                    and (not skip_blank_lines or 0 != len(node.data.strip()))]
+        return u"\n".join(textlist)
+
+
+    def toHtml(self, title="", encoding="utf-8"):
+        """Return an UTF-8 encoded HTML representation of the document.
+
+        The current version of this function is essentially the same as toText.
+
+        """
+        values = {}
+
+        import codecs
+        # TODO: Support other encodings than UTF-8, and maybe Unicode
+        values["title"] = unicode(title).encode(encoding) # Title for the page, if applicable
+        bodyList = [] # the lines to insert into the body of the document
+        # Not implemented yet:
+        metaList = []   # Meta tags for the header
+        styleList = []  # Stylesheet elements
+
+        # Extract the body of the HTML document
+        # TODO: Include class, name/id, and an appropriate tag (not necessarily p) for each line:
+        #   <%s class="%s" name="%s">%s</%s> % (tag, class, name, content, tag)
+        # Use a reference table for the content.xml -> html conversion, and another for styles.xml -> css
+        # Also: images, tables, hyperlinks
+        htmllist = ["<p>%s</p>" % node.data.encode(encoding) 
+                    for node in doc_order_iter(self.content) 
+                    if node.nodeType == node.TEXT_NODE]
+        values["body"] = "\n".join(htmllist)
+
+        values["meta"] = "" # TODO
+        values["styles"] = "" # TODO
+
+        # Apply values to the HTML template
+        f = codecs.open(os.path.dirname(__file__) + "/template.html", 'r', encoding, 'xmlcharrefreplace')
+        htmlTemplate = f.read()
+        f.close()
+
+        htmlTemplate = htmlTemplate.encode(encoding)
+
+        return htmlTemplate % values
+
+
+    def replace(self, search, replace):
+        """Replace all occurences of search in content by replace.
+        
+        Regular expressions are fully supported for search and replace.
+        
+        """
+        if not search:
+            return 0
+        import re, sre_constants
+        try:
+            _replace = re.compile(search).sub
+            search = lambda x, y: find(x, y)
+
+        except (sre_constants.error, TypeError), v:
+            print 'Warning: could not compile regular expression:', v
+            return 0
+        count = 0
+        for node in doc_order_iter(self.content):
+            if node.nodeType == node.TEXT_NODE and node.data:
+                try:
+                    replaced = _replace(replace, node.data)
+                    if replaced != node.data:
+                        node.data = replaced
+                        count += 1
+                except (sre_constants.error, TypeError), v:
+                    print 'Warning: could not compile regular expression:', v
+                    return 0
+        return count
+
+
+# ----------------------------------------------------------------------------
+# Global functions for search, navigation,  etc.
 
 def get_search_for_filter(filter):
     """Return a search function for the given filter.
-    Any filter not containing an escaped dot ("\.") and containing at least one "*", "?" or "." will be interpreted as glob.
-    But in addition all globs still may contain all other regular expression sequences like [\d_-] or (home|job).
-    Please note that you have to use " as a string separator on Windows command line.
-    In addition some regular expressions containing characters like the pipe symbol "|" must be enclosed by string separators."""
 
+    Any filter not containing an escaped dot ("\.") and containing at least one
+    "*", "?" or "." will be interpreted as glob.
+    But in addition all globs still may contain all other regular expression 
+    sequences like [\d_-] or (home|job).
+
+    Please note that you have to use " as a string separator on Windows command 
+    line. In addition, some regular expressions containing characters like the 
+    pipe symbol "|" must be enclosed by string separators.
+    
+    """
     if filter:
         import re, sre_constants
         try:
@@ -253,8 +267,8 @@ def get_search_for_filter(filter):
 
 
 def is_glob(filter):
-  """Return True if filter contains a glob expression, False otherwise."""
-  return not r'\.' in filter and [c for c in '*[]?.' if c in filter]
+    """Return True if filter contains a glob expression, False otherwise."""
+    return not r'\.' in filter and [c for c in '*[]?.' if c in filter]
 
 
 def list_directory(directory, filter=None, recursive=False, must_be_directory=False):
@@ -289,7 +303,7 @@ def list_directory(directory, filter=None, recursive=False, must_be_directory=Fa
                  search_odf(f)]
         found_files.extend(files)
         if not recursive:
-          del dirs[:]
+            del dirs[:]
 
     return found_files
 
@@ -301,7 +315,7 @@ def get_path_and_filter(directory, test_existence=True):
     filter = ''
 
     if len(directory) == 1 and directory[0] in r"\/":
-      path = os.path.sep
+        path = os.path.sep
 
     elif test_existence and os.path.isdir(directory):
         path = directory
@@ -347,56 +361,56 @@ def get_path_and_filter(directory, test_existence=True):
 
 
 def get_win_root_directory(directory):
-  """Return windows root directory with path separator, otherwise unchanged."""
-  if len(directory) == 2 and directory[1] == ':':
-      return directory + os.path.sep
-  return directory
+    """Return windows root directory with path separator, otherwise unchanged."""
+    if len(directory) == 2 and directory[1] == ':':
+        return directory + os.path.sep
+    return directory
 
 
 # http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/52560
 def unique(seq):
-  """Return a unique list of the sequence elements."""
+    """Return a unique list of the sequence elements."""
 
-  d = {}
-  return [d.setdefault(e,e) for e in seq if e not in d]
+    d = {}
+    return [d.setdefault(e,e) for e in seq if e not in d]
 
 
 def list_intersect(needles, haystack):
-  """Return a list of all needles which are in haystack list.
+    """Return a list of all needles which are in haystack list.
 
-  Result is like [e for e in output.keys() if e in ['xml','html']]."""
-  return [e for e in haystack if e in needles]
+    Result is like [e for e in output.keys() if e in ['xml','html']]."""
+    return [e for e in haystack if e in needles]
 
 
 def get_encoding(file):
-  """Return the current encoding of the given file."""
-  # TODO: support sys.stdout
-  encoding = getattr(file, "encoding", None)
-  if not encoding:
-    import sys
-    encoding = sys.getdefaultencoding()
-  return encoding
+    """Return the current encoding of the given file."""
+    # TODO: support sys.stdout
+    encoding = getattr(file, "encoding", None)
+    if not encoding:
+        import sys
+        encoding = sys.getdefaultencoding()
+    return encoding
 
 
 def print_unicode(outfile, output, encoding=None, output_encoding=None):
-  """Print output to stdout and tries different encodings if necessary."""
-  import sys
-  try:
-    if output_encoding:
-      output = output.decode(output_encoding)
-  except UnicodeError, e:
-    pass
-
-  try:
-    print >>outfile, output
-  except UnicodeError, e:
+    """Print output to stdout and tries different encodings if necessary."""
+    import sys
     try:
-      # output.encode('latin_1')
-      import codecs
-      outfile = codecs.getwriter(encoding)(outfile)
-      print >>outfile, output
+        if output_encoding:
+            output = output.decode(output_encoding)
     except UnicodeError, e:
-      raise
+        pass
+
+    try:
+        print >>outfile, output
+    except UnicodeError, e:
+        try:
+            # output.encode('latin_1')
+            import codecs
+            outfile = codecs.getwriter(encoding)(outfile)
+            print >>outfile, output
+        except UnicodeError, e:
+            raise
 
 
 # http://www-128.ibm.com/developerworks/library/x-tipgenr.html

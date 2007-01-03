@@ -1,38 +1,108 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
 
-""" odf.py
 
-These utilities will attempt to cover the lightweight portions of Rob Weir's
-proposal for an OpenDocument Developer's Kit:
-http://opendocument.xml.org/node/154
+# These utilities will attempt to cover the lightweight portions of Rob Weir's
+# proposal for an OpenDocument Developer's Kit:
+# http://opendocument.xml.org/node/154
+#
+# The full OASIS OpenDocument specification can be found here:
+# http://www.oasis-open.org/specs/index.php#opendocumentv1.0
 
-The full OASIS OpenDocument specification can be found here:
-http://www.oasis-open.org/specs/index.php#opendocumentv1.0
+
+"""odf.py provides a powerful command line interface for batch scripting.
+
+--selftest just executes all unittests and returns.
+--help prints this and returns.
+
+Multiple input files can be passed as directories and/or file filters.
+File filters can be file names, globs and/or regular expressions.
+If a relative or absolute file name is not found, the directory will be
+searched for all ODF files which match the filter.
+So * would find odc, odf, odg, odi, odm, odp, ods, odt, otg, otp, ots, ott.
+--recursive searches directories recursively.
+
+One or multiple actions can be done separately to each input file.
+Each different output action results in an output file.
+
+The default output file name is the absolute input file name.
+--file changes the default output file name.
+--filename-append appends .txt, .xml, .html or the same ODF extension as the
+input file has.
+--directory changes the output path (returns if directory doesn't exist).
+--force allows overwriting of existing files!
+
+--replace replaces all occurences of a search expression by a replacement
+expression before any other action occurs.
+Only text nodes of content.xml will be affected.
+
+--tohtml converts the input file to a HTML representation.
+--totext converts the input file content.xml to a plain-text representation.
+--toxml outputs the input file content.xml.
+
+--toodf outputs the input file even if no data was changed.
+Even if --toodf is not given, ODF output will be written if no conversion
+was done but data was changed.
+No non-ODF data will be written to input file names, even if --force.
+The corresponding warning will not be print if --stdout is given and --file
+is not given.
+
+--stdout prints any output except ODF data to the console in addition to
+eventually writing output files.
+
+--quiet suppresses all output to stdout.
+--verbose provides more informational output.
+
+--list-authors outputs a list of authors for all input files.
 
 
-Bob Sutor's Dr. ODF project/blog series (http://www.sutor.com)
-suggests the following features as examples:
-- Take an ODF document and throw away all formatting except the basic heading
-    and paragraph structure, printing what's left on the screen. [toText]
-- Take an ODF word processing document and convert it to HTML. (Don't forget
-    the images and tables!) [toHtml]
-- Extract all the elements of a given type (e.g. formulas, code) from an ODF
-    document. [getElementsByType]
-- Take an ODF document and extract any images/objects embedded in it.
-    [getEmbeddedObjects]
-- Iterate over a directory of ODF files and print how many of them were
-    authored by a given person. (list file ownership in a friendly format)
+For the time being you can provide all options and arguments in any order:
+python odf.py --list-authors --toxml dir/a*.ods --totext --filename-append
 
-More ideas:
-- Determine document type (in case of wrong filename extension)
-- Clean up styles: If two or more styles have the same attributes, pick one
-  name for all of them and delete the other styles.
-- Diff -- mad useful. In the distant future, it may be possible to re-implement
-  "track changes" as a diff patch to be included in the ODF file.
-- Templating system -- e.g. set up an interface for generating new documents
-  with a predetermined look-and-feel, including headers, footers etc.
-  Also have an interface for generating reports using this system
+Except option parameters have to follow their options directly:
+python odf.py --replace s([e])arch r\\1place /*.od[ts]
+python odf.py a.odt --file dir/a.html --tohtml
+
+
+Examples:
+---------
+
+# Replace text in documents, convert them to text and print the result.
+python odf.py /* --replace s r --totext --stdout
+
+# Replace text, convert to HTML and save with appended .html extension.
+python odf.py * --replace s r --tohtml --filename-append
+
+# Search recursively, replace text and overwrite only changed input files.
+python odf.py . --replace s r --recursive --force
+
+# Search recursively, replace text and overwrite all input files.
+python odf.py . --replace s r --recursive --force --toodf
+
+
+Attention:
+----------
+
+--toodf or changed ODF data and no conversions result in ODF output.
+
+Examples:
+
+# Write new ODF files even when no data was changed.
+python odf.py * --replace s r --toodf --filename-append
+
+# Overwrite input file if data was changed.
+python odf.py a.odt --force --replace s r
+
+# Do not overwrite input file EVEN if data was changed! A warning message
+# will be printed that writing text to input file is not permitted.
+python odf.py a.odt --force --replace s r --totext
+
+# Print to stdout but suppress text-to-ODF warning even if data was changed.
+python odf.py a.odt --force --replace s r --totext --stdout
+
+# But: write to input file even if data was not changed.
+python odf.py a.odt --force --replace s r --totext --stdout --toodf
+
 """
 
 import os
@@ -41,12 +111,12 @@ from document import *
 
 
 class WriteError(Exception):
-  """Thrown if unable to write output."""
-  pass
+    """Thrown if unable to write output."""
+    pass
 
 class ReadError(Exception):
-  """Thrown if unable to read input."""
-  pass
+    """Thrown if unable to read input."""
+    pass
 
 
 # -----------------------------------------------------------------------------
@@ -56,9 +126,9 @@ def load(src):
 
     import zipfile
     try:
-      zf = zipfile.ZipFile(src, 'r')
+        zf = zipfile.ZipFile(src, 'r')
     except IOError, e:
-      raise ReadError(e)
+        raise ReadError(e)
 # TODO: read previously written ODF files which contained Unicode characters
 # http://mail.python.org/pipermail/python-list/2006-January/363102.html
 #    except zipfile.BadZipfile:
@@ -75,7 +145,7 @@ def load(src):
     obj_dict = {}
     obj_dict["additional"] = {}
     if isinstance(src, basestring) and len(src) < 1000 and os.path.isfile(src):
-      obj_dict["file"] = src
+        obj_dict["file"] = src
     inverted=dict([(v,k) for k,v in Document.files.items()])
     for filename in names:
         # If the Zip entry is a special ODF file, store it with it's own attribute name
@@ -129,42 +199,47 @@ def dumps(doc):
 # File format conversions
 
 def OdfToText(filename, skip_blank_lines=True):
-  obj = load(filename)
-  return obj.toText(skip_blank_lines)
+    obj = load(filename)
+    return obj.toText(skip_blank_lines)
+
 
 def OdfToHtml(filename, title=''):
-  obj = load(filename)
-  return obj.toHtml(title)
+    obj = load(filename)
+    return obj.toHtml(title)
+
 
 def OdfToSqlite(filename):
-  """Return SQLite binary string of the zipped OpenDocument file."""
+    """Return SQLite binary string of the zipped OpenDocument file."""
 
-  try:
-      from sqlite3 import dbapi2 as sqlite    # Python25
-  except ImportError:
-      from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
+    try:
+        from sqlite3 import dbapi2 as sqlite    # Python25
+    except ImportError:
+        from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
 
-  try:
-    file = open(filename,'rb')
-  except IOError, e:
-    raise ReadError(e)
-  doc = file.read()
-  file.close()
-  return sqlite.Binary(doc)
+    try:
+        file = open(filename,'rb')
+    except IOError, e:
+        raise ReadError(e)
+    doc = file.read()
+    file.close()
+    return sqlite.Binary(doc)
+
 
 def SqlToOdf(blob, filename=None):
-  """Save the binary string blob containing a zipped OpenDocument into filename.
-  Return a corresponding Document if filename is None."""
+    """Save the binary string blob containing a zipped OpenDocument into filename.
 
-  if filename is None:
-    return loads(blob)
+    Return a corresponding Document if filename is None.
+    """
 
-  try:
-    file = open(filename,'wb')
-  except IOError, e:
-    raise WriteError(e)
-  file.write(blob)
-  file.close()
+    if filename is None:
+        return loads(blob)
+
+    try:
+        file = open(filename,'wb')
+    except IOError, e:
+        raise WriteError(e)
+    file.write(blob)
+    file.close()
 
 
 
@@ -172,105 +247,11 @@ def SqlToOdf(blob, filename=None):
 # Commmand line processing
 
 def process_command_line():
-  """
-  odf.py provides a powerful command line interface for batch scripting.
-
-  --selftest just executes all unittests and returns.
-  --help prints this and returns.
-
-  Multiple input files can be passed as directories and/or file filters.
-  File filters can be file names, globs and/or regular expressions.
-  If a relative or absolute file name is not found, the directory will be
-  searched for all ODF files which match the filter.
-  So * would find odc, odf, odg, odi, odm, odp, ods, odt, otg, otp, ots, ott.
-  --recursive searches directories recursively.
-
-  One or multiple actions can be done separately to each input file.
-  Each different output action results in an output file.
-
-  The default output file name is the absolute input file name.
-  --file changes the default output file name.
-  --filename-append appends .txt, .xml, .html or the same ODF extension as the
-  input file has.
-  --directory changes the output path (returns if directory doesn't exist).
-  --force allows overwriting of existing files!
-
-  --replace replaces all occurences of a search expression by a replacement
-  expression before any other action occurs.
-  Only text nodes of content.xml will be affected.
-
-  --tohtml converts the input file to a HTML representation.
-  --totext converts the input file content.xml to a plain-text representation.
-  --totext outputs the input file content.xml.
-
-  --toodf outputs the input file even if no data was changed.
-  Even if --toodf is not given, ODF output will be written if no conversion
-  was done but data was changed.
-  No non-ODF data will be written to input file names, even if --force.
-  The corresponding warning will not be print if --stdout is given and --file
-  is not given.
-
-  --stdout prints any output except ODF data to the console in addition to
-  eventually writing output files.
-
-  --quiet suppresses all output to stdout.
-  --verbose provides more informational output.
-
-  --list-authors outputs a list of authors for all input files.
-
-
-  For the time being you can provide all options and arguments in any order:
-  python odf.py --list-authors --toxml dir/a*.ods --totext --filename-append
-
-  Except option parameters have to follow their options directly:
-  python odf.py --replace s([e])arch r\\1place /*.od[ts]
-  python odf.py a.odt --file dir/a.html --tohtml
-
-
-  Examples:
-  ---------
-
-  # Replace text in documents, convert them to text and print the result.
-  python odf.py /* --replace s r --totext --stdout
-
-  # Replace text, convert to HTML and save with appended .html extension.
-  python odf.py * --replace s r --tohtml --filename-append
-
-  # Search recursively, replace text and overwrite only changed input files.
-  python odf.py . --replace s r --recursive --force
-
-  # Search recursively, replace text and overwrite all input files.
-  python odf.py . --replace s r --recursive --force --toodf
-
-
-  Attention:
-  ----------
-
-  --toodf or changed ODF data and no conversions result in ODF output.
-
-  Examples:
-
-  # Write new ODF files even when no data was changed.
-  python odf.py * --replace s r --toodf --filename-append
-
-  # Overwrite input file if data was changed.
-  python odf.py a.odt --force --replace s r
-
-  # Do not overwrite input file EVEN if data was changed! A warning message
-  # will be printed that writing text to input file is not permitted.
-  python odf.py a.odt --force --replace s r --totext
-
-  # Print to stdout but suppress text-to-ODF warning even if data was changed.
-  python odf.py a.odt --force --replace s r --totext --stdout
-
-  # But: write to input file even if data was not changed.
-  python odf.py a.odt --force --replace s r --totext --stdout --toodf
-
-  """
+  """Handle command-line arguments."""
 
   from optparse import OptionParser
   usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n"
-  usage += process_command_line.__doc__.replace("\n  ", "\n")
+  usage += __doc__.replace("\n  ", "\n") # etal20070102: Why replace()?
   parser = OptionParser(usage)
 
   parser.add_option("-d", "--directory", dest="directory",
@@ -420,20 +401,27 @@ def process_command_line():
             if filename == infile and (extension != 'odf' or not options.force):
               if extension != 'odf':
                 if not options.stdout or options.filename:
-                  print_unicode(sys.stderr, u'Warning: Cannot overwrite input file '
-                                u'with text content (pass --file or --filename-append)', encoding)
+                  print_unicode(sys.stderr, 
+                                u'Warning: Cannot overwrite input file ' \
+                                u'with text content (pass --file or --filename-append)',
+                                encoding)
               elif changed:
-                print_unicode(sys.stderr, u'Warning: Not allowed to overwrite inut file (pass --force to allow)', encoding)
+                print_unicode(sys.stderr, 
+                              u'Warning: Not allowed to overwrite input file (pass --force to allow)',
+                              encoding)
 
             elif filename != infile and not options.force and os.path.isfile(filename):
-              print_unicode(sys.stderr, u'Warning: Skipping already '
-                          + u'existing output file "' + filename + u'"',
-                          encoding)
+              print_unicode(sys.stderr, 
+                            u'Warning: Skipping already ' \
+                            u'existing output file "%s"' % filename,
+                            encoding)
 
             else:
               if options.force and verbosity == 2 and os.path.isfile(filename):
-                print_unicode(sys.stdout, u'Warning: Overwriting existing '
-                          + u'output file "' + filename + u'"', encoding)
+                print_unicode(sys.stdout, 
+                              u'Warning: Overwriting existing ' \
+                              u'output file "%s"' % filename,
+                              encoding)
 
               if extension in ['xml','html']:
                 try:
@@ -454,7 +442,7 @@ def process_command_line():
 
               if verbosity == 2:
                 print_unicode(sys.stdout,
-                              u'Writing ' + extension + u' to ' + filename,
+                              u'Writing %s to %s' % (extension, filename),
                               encoding)
 
               try:
@@ -473,7 +461,7 @@ def process_command_line():
         filecount = u'1 file'
       else:
         filecount = unicode(count) + u' files'
-      content.append(u'Author ' + author + u' (' + filecount + u'):')
+      content.append(u'Author %s (%s):' % (author, filecount))
       for file in authors[author]:
         content.append(file)
     output = u"\n".join(content)
@@ -489,15 +477,17 @@ def process_command_line():
 
         if not options.force and os.path.isfile(filename):
           print_unicode(sys.stderr,
-                        u'Warning: Skipping already existing output'\
-                              u' file "' + filename + u'"', encoding)
+                        u'Warning: Skipping already existing output file "%s"' % filename,
+                        encoding)
         else:
           if verbosity == 2:
             if options.force and os.path.isfile(filename):
-              print_unicode(sys.stdout, u'Warning: Overwriting existing '
-                        + u'output file "' + filename + u'"', encoding)
+              print_unicode(sys.stdout, 
+                            u'Warning: Overwriting existing output file "%s"' % filename,
+                            encoding)
             print_unicode(sys.stdout,
-                          u'Writing author list to ' + filename, encoding)
+                          u'Writing author list to ' + filename,
+                          encoding)
           try:
             outfile = codecs.open(filename, 'w', encoding, 'replace')
           except IOError, e:
@@ -524,8 +514,9 @@ def process_command_line():
   except WriteError, e:
     print_unicode(sys.stderr, u'Could not write output file: ' + str(e), encoding)
 
+
 if __name__ == "__main__":
-  process_command_line()
+    process_command_line()
 
 
 #EOF

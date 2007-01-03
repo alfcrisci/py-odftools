@@ -10,7 +10,8 @@ _If the problem is specific, consider using the issues tracking system._
 
 
 *Command line*
-  * Define and process command line parameters.
+  * Determine how to handle stdout and stdin using command-line args
+    * stdout seems to be a reasonable default for most text output, e.g. authors
 
 
 *HTML output:*
@@ -21,7 +22,7 @@ _If the problem is specific, consider using the issues tracking system._
       }}}
     * The stylesheet in the header will be extracted from `styles.xml` -- this is more complicated, and might require a reference table for translating ODF XML to CSS.
     * The tag names are a little arbitrary, but should be selected sensibly at some point so that the HTML output looks reasonable with CSS disabled.
-  * Embedded objects
+  * Embedded objects / images
   * Tables
 
 
@@ -47,29 +48,9 @@ _If the problem is specific, consider using the issues tracking system._
   * Clean up styles: If two or more styles have the same attributes, pick one name for all of them and delete the other styles.
 
 
-*Bob Sutor suggests:*
-  * Iterate over a directory of ODF files and print how many of them were authored by a given person. (list file ownership in a friendly format)
-
-
-*Unit tests:*
-  * As needed, for new features.
-
-
 
 == Links ==
 
   * Rob Weir's proposal for an OpenDocument Developer's Kit: [http://opendocument.xml.org/node/154]
 
   * Bob Sutor's Dr. ODF project/blog series: [http://www.sutor.com/newsite/blog-open/?cat=93]
-
-
-
-
-
-
-
-
-
-
-
-

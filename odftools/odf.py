@@ -21,14 +21,18 @@ If a relative or absolute file name is not found, the directory will be
 searched for all ODF files which match the filter.
 So * would find odc, odf, odg, odi, odm, odp, ods, odt, otg, otp, ots, ott.
 --recursive searches directories recursively.
+The optional argument LEVEL specifies the maximum recursion level.
+For every file filter the current folder is the start directory.
 
 One or multiple actions can be done separately to each input file.
 Each different output action results in an output file.
 
 The default output file name is the absolute input file name.
 --file changes the default output file name.
---filename-append appends .txt, .xml, .html or the same ODF extension as the
-input file has.
+--extension-replace changes the output name extension to .txt, .xml, .html or
+the same ODF extension as the input file has.
+--extension-append appends .txt, .xml, .html or the same ODF extension as the
+input file has (deactivates --extension-replace).
 --directory changes the output path (returns if directory doesn't exist).
 --force allows overwriting of existing files!
 
@@ -54,10 +58,11 @@ eventually writing output files.
 --verbose provides more informational output.
 
 --list-authors outputs a list of authors for all input files.
+The optional argument FILE specifies the output file name.
 
 
 For the time being you can provide all options and arguments in any order:
-python odf.py --list-authors --toxml dir/a*.ods --totext --filename-append
+python odf.py --list-authors --toxml dir/a*.ods --totext --extension-append
 
 Except option parameters have to follow their options directly:
 python odf.py --replace s([e])arch r\\1place /*.od[ts]
@@ -71,7 +76,7 @@ Examples:
 python odf.py /* --replace s r --totext --stdout
 
 # Replace text, convert to HTML and save with appended .html extension.
-python odf.py * --replace s r --tohtml --filename-append
+python odf.py * --replace s r --tohtml --extension-append
 
 # Search recursively, replace text and overwrite only changed input files.
 python odf.py . --replace s r --recursive --force
@@ -79,16 +84,21 @@ python odf.py . --replace s r --recursive --force
 # Search recursively, replace text and overwrite all input files.
 python odf.py . --replace s r --recursive --force --toodf
 
+# Search recursively (maximum 2 levels), print list of authors to stdout and authors.txt
+python odf.py /a* /b/c* --recursive 2 --list-authors authors.txt --stdout
+
 
 Attention:
 ----------
+
+--extension-replace could lead to an output filename of an input file.
 
 --toodf or changed ODF data and no conversions result in ODF output.
 
 Examples:
 
 # Write new ODF files even when no data was changed.
-python odf.py * --replace s r --toodf --filename-append
+python odf.py * --replace s r --toodf --extension-append
 
 # Overwrite input file if data was changed.
 python odf.py a.odt --force --replace s r
@@ -249,31 +259,38 @@ def SqlToOdf(blob, filename=None):
 def process_command_line():
   """Handle command-line arguments."""
 
-  from optparse import OptionParser
-  usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n\n"
-  usage += __doc__.replace("\n  ", "\n") # etal20070102: Why replace()?
-  parser = OptionParser(usage)
+  # as long as optional option values and negation are not implemented
+  from optparse_optional import OptionalOptionParser
 
-  parser.add_option("-d", "--directory", dest="directory", metavar="DIRECTORY", 
+  usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n"
+  usage += __doc__
+  parser = OptionalOptionParser(usage)
+
+  parser.add_option("-d", "--directory", dest="directory", metavar="DIRECTORY",
                     help="Write all output files to DIRECTORY.")
-  parser.add_option("-f", "--file", dest="filename", metavar="FILE",
-                    help="Write to output FILE.")
-  parser.add_option("--filename-append", dest="filename_append",
+  parser.add_option("--extension-append", dest="extension_append",
                     action="store_true",
                     help="Append an extension to each output FILE.")
+  parser.add_option("--extension-replace", dest="extension_replace",
+                    action="store_true",
+                    help="Replace the extension of each output FILE.")
+  parser.add_option("-f", "--file", dest="filename", metavar="FILE",
+                    help="Write to output FILE.")
   parser.add_option("--force", dest="force", action="store_true",
                     help="Force overwriting of output FILE.")
   parser.add_option("--list-authors", dest="list_author", action="store_true",
-                    help="Print a list of authors for all input files.")
+                    oargs=1, help="Print a list of authors for all input files\
+                    [optional argument: output FILE].")
   parser.add_option("-o", "--stdout", dest="stdout", action="store_true",
-                    help="Write to stdout instead of output FILE.")
+                    help="Write to stdout in addition to output FILE.")
   parser.add_option("-q", "--quiet", dest="quiet", action="store_true",
                     help="Don't print status messages to stdout.")
   parser.add_option("-r", "--replace", dest="replace", nargs=2,
                     metavar="SEARCH REPLACE",
                     help="Replace search string by replacement string.")
-  parser.add_option("--recursive", dest="recursive", action="store_true",
-                    help="Search directories recursively.")
+  parser.add_option("--recursive", dest="recursive", action="store_true", oargs=1,
+                    help="Search directories recursively\
+                    [optional argument: maximum recursion LEVEL].")
   parser.add_option("--selftest", dest="selftest", action="store_true",
                     help="Run the test suite.")
   parser.add_option("--tohtml", dest="tohtml", action="store_true",
@@ -289,7 +306,6 @@ def process_command_line():
 
   # TODO: options.stdin
   # TODO: options.pipe
-  # TODO: options.output_directory # Maybe just change --directory ?
   # TODO: options.case_insensitive_file_search
   # TODO: options.encoding
 
@@ -319,6 +335,12 @@ def process_command_line():
 
   filter = ''
   files = []
+
+  if isinstance(options.recursive, tuple):
+    if not options.recursive[0]:
+      options.recursive = False
+    else:
+      options.recursive = int(options.recursive[1])
 
   for arg in args:
     if os.path.isfile(arg):
@@ -374,7 +396,7 @@ def process_command_line():
         content['xml'] = doc.toXml(encoding='utf-8')
       if options.toodf or (changed and not content):
         content['odf'] = dumps(doc)
-      if options.list_author:
+      if parser.is_true(options.list_author):
         author = doc.getAuthor()
         if author:
           if not authors.has_key(author):
@@ -389,35 +411,40 @@ def process_command_line():
             if options.filename:
               filename = options.filename
 
-            if options.filename_append:
+            if options.extension_append or options.extension_replace:
               if 'odf' == extension:
-                filename += u'.' + infile.split('.')[-1]
+                extension_new = infile.split('.')[-1]
               else:
-                filename += u'.' + unicode(extension)
+                extension_new = unicode(extension)
+              if options.extension_append:
+                filename += u'.' + extension_new
+              else:
+                filename = filename[:-3] + extension_new
+
             if options.directory:
               filename = os.path.join(options.directory, os.path.basename(filename))
 
             if filename == infile and (extension != 'odf' or not options.force):
               if extension != 'odf':
                 if not options.stdout or options.filename:
-                  print_unicode(sys.stderr, 
-                                u'Warning: Cannot overwrite input file ' \
-                                u'with text content (pass --file or --filename-append)',
-                                encoding)
+                  print_unicode(sys.stderr,
+                                u'Warning: Cannot overwrite input file with '\
+                                u'text content (pass --file, --extension-'\
+                                u'append or --extension-replace)', encoding)
               elif changed:
-                print_unicode(sys.stderr, 
+                print_unicode(sys.stderr,
                               u'Warning: Not allowed to overwrite input file (pass --force to allow)',
                               encoding)
 
             elif filename != infile and not options.force and os.path.isfile(filename):
-              print_unicode(sys.stderr, 
+              print_unicode(sys.stderr,
                             u'Warning: Skipping already ' \
                             u'existing output file "%s"' % filename,
                             encoding)
 
             else:
               if options.force and verbosity == 2 and os.path.isfile(filename):
-                print_unicode(sys.stdout, 
+                print_unicode(sys.stderr,
                               u'Warning: Overwriting existing ' \
                               u'output file "%s"' % filename,
                               encoding)
@@ -466,15 +493,19 @@ def process_command_line():
     output = u"\n".join(content)
 
     if output:
-      # TODO: maybe set a default output file name like list_authors.txt?
       # Shouldn't stdout be the default? '>' and '|' already exist as tools.
-      if options.filename:
+      if isinstance(options.list_author, tuple):
+        filename = options.list_author[1] # first optional argument
+      elif options.filename:
         filename = options.filename
-        if options.filename_append:
+        if options.extension_append:
           filename += u'.txt'
         if options.directory:
           filename = os.path.join(options.directory, os.path.basename(filename))
+      else:
+        filename = ''
 
+      if filename:
         if not options.force and os.path.isfile(filename):
           print_unicode(sys.stderr,
                         u'Warning: Skipping already existing output file "%s"' % filename,
@@ -482,7 +513,7 @@ def process_command_line():
         else:
           if verbosity == 2:
             if options.force and os.path.isfile(filename):
-              print_unicode(sys.stdout, 
+              print_unicode(sys.stderr,
                             u'Warning: Overwriting existing output file "%s"' % filename,
                             encoding)
             print_unicode(sys.stdout,
@@ -497,13 +528,14 @@ def process_command_line():
 
       elif not options.stdout:
         if verbosity >= 1:
-          print 'No way to output list of authors (pass --file or --stdout)'
+          print >>sys.stderr, 'No way to output list of authors (pass --file',
+          print >>sys.stderr, 'or --stdout)'
 
       else:
         print_unicode(sys.stdout, output, encoding)
 
   except UnicodeError, e:
-    if unicode == type(e.object):
+    if isinstance(e.object, unicode):
       import unicodedata
       print >>sys.stderr, e, ' -> character name: "' + unicodedata.name(e.object[e.start]) + '"'
     else:

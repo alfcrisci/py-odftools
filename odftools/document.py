@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-""" The document object, for containing the document in memory 
+""" The document object, for containing the document in memory
 and to be used as the intermediate step for all operations.
 
 This implementation relies on minidom for handling the object. It may later
@@ -112,9 +112,9 @@ class Document:
 
         # TODO: support other embedded objects
         search = get_search_for_filter(filter)
-        return dict([(filename[9:], content) 
-                    for filename, content in self.additional.items() 
-                    if 'Pictures/' == filename[:9] 
+        return dict([(filename[9:], content)
+                    for filename, content in self.additional.items()
+                    if 'Pictures/' == filename[:9]
                     and search(filename[9:])])
 
 
@@ -152,8 +152,8 @@ class Document:
 
     def toText(self, skip_blank_lines=True):
         """Return the content of the document as a plain-text Unicode string."""
-        textlist = [node.data for node in doc_order_iter(self.content) 
-                    if node.nodeType == node.TEXT_NODE 
+        textlist = [node.data for node in doc_order_iter(self.content)
+                    if node.nodeType == node.TEXT_NODE
                     and (not skip_blank_lines or 0 != len(node.data.strip()))]
         return u"\n".join(textlist)
 
@@ -179,8 +179,8 @@ class Document:
         #   <%s class="%s" name="%s">%s</%s> % (tag, class, name, content, tag)
         # Use a reference table for the content.xml -> html conversion, and another for styles.xml -> css
         # Also: images, tables, hyperlinks
-        htmllist = ["<p>%s</p>" % node.data.encode(encoding) 
-                    for node in doc_order_iter(self.content) 
+        htmllist = ["<p>%s</p>" % node.data.encode(encoding)
+                    for node in doc_order_iter(self.content)
                     if node.nodeType == node.TEXT_NODE]
         values["body"] = "\n".join(htmllist)
 
@@ -199,9 +199,9 @@ class Document:
 
     def replace(self, search, replace):
         """Replace all occurences of search in content by replace.
-        
+
         Regular expressions are fully supported for search and replace.
-        
+
         """
         if not search:
             return 0
@@ -235,13 +235,13 @@ def get_search_for_filter(filter):
 
     Any filter not containing an escaped dot ("\.") and containing at least one
     "*", "?" or "." will be interpreted as glob.
-    But in addition all globs still may contain all other regular expression 
+    But in addition all globs still may contain all other regular expression
     sequences like [\d_-] or (home|job).
 
-    Please note that you have to use " as a string separator on Windows command 
-    line. In addition, some regular expressions containing characters like the 
+    Please note that you have to use " as a string separator on Windows command
+    line. In addition, some regular expressions containing characters like the
     pipe symbol "|" must be enclosed by string separators.
-    
+
     """
     if filter:
         import re, sre_constants
@@ -272,7 +272,11 @@ def is_glob(filter):
 
 
 def list_directory(directory, filter=None, recursive=False, must_be_directory=False):
-    """Scan a directory for ODF files."""
+    """Scan a directory for ODF files.
+
+    If recursive is an int, 0 is equivalent to False (no recursion).
+    Any positive int limits the maximum recursion level.
+    """
 
     directory = get_win_root_directory(directory)
     if must_be_directory and not os.path.isdir(directory):
@@ -297,12 +301,22 @@ def list_directory(directory, filter=None, recursive=False, must_be_directory=Fa
     search_odf = get_search_for_filter(odf_extensions)
 
     found_files = []
+    root = os.path.abspath(unicode(directory))
+    root_level = root.count(os.path.sep)
+    if os.path.sep == root[-1]:
+        root_level -= 1
     for root, dirs, files in os.walk(unicode(directory)):
         files = [directory == '.' and os.path.join(root, f)[2:] or
                  os.path.join(root, f) for f in files if search_user(f) and
                  search_odf(f)]
         found_files.extend(files)
-        if not recursive:
+
+        level = root.count(os.path.sep) - root_level
+        if os.path.sep == root[-1]:
+            level -= 1
+
+        if not recursive or \
+           not isinstance(recursive, bool) and level >= recursive:
             del dirs[:]
 
     return found_files

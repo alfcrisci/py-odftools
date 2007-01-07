@@ -13,6 +13,7 @@
 """odf.py provides a powerful command line interface for batch scripting.
 
 --selftest just executes all unittests and returns.
+By default it writes to stderr, but you can write to file or stdout instead.
 --help prints this and returns.
 
 Multiple input files can be passed as directories and/or file filters.
@@ -51,6 +52,13 @@ No non-ODF data will be written to input file names, even if --force.
 The corresponding warning will not be print if --stdout is given and --file
 is not given.
 
+All conversion options take an optional argument for writing to a different
+output file. It will be preferred over the --file option and disregards the
+--extension-* options.
+
+--stdin reads the contents of one input file from stdin prior to processing any
+other input files (if data is available). Default output file name is "stdin".
+
 --stdout prints any output except ODF data to the console in addition to
 eventually writing output files.
 
@@ -84,8 +92,11 @@ python odf.py . --replace s r --recursive --force
 # Search recursively, replace text and overwrite all input files.
 python odf.py . --replace s r --recursive --force --toodf
 
-# Search recursively (maximum 2 levels), print list of authors to stdout and authors.txt
+# Search recursively (maximum 2 levels), print authors to stdout and file.
 python odf.py /a* /b/c* --recursive 2 --list-authors authors.txt --stdout
+
+# Convert document to HTML and text and save with different file names.
+python odf.py a.odt --tohtml b.htm --totext c.log --file=for_unspecified_opts
 
 
 Attention:
@@ -139,64 +150,73 @@ def load(src):
         zf = zipfile.ZipFile(src, 'r')
     except IOError, e:
         raise ReadError(e)
-# TODO: read previously written ODF files which contained Unicode characters
-# http://mail.python.org/pipermail/python-list/2006-January/363102.html
-#    except zipfile.BadZipfile:
-#      original = open(src, 'rb')
-#      try:
-#         data = original.read()
-#      finally:
-#        original.close()
-#      position = data.rindex(zipfile.stringEndArchive, -(22 + 0), -20)
-#      import cStringIO
-#      coredata = cStringIO.StringIO(data[: 22 + position])
-#      zf = zipfile.ZipFile(coredata)
+
     names = zf.namelist()
     obj_dict = {}
     obj_dict["additional"] = {}
+    obj_dict["file_dates"] = {}
     if isinstance(src, basestring) and len(src) < 1000 and os.path.isfile(src):
         obj_dict["file"] = src
-    inverted=dict([(v,k) for k,v in Document.files.items()])
+    inverted = dict([(v,k) for k,v in Document.files.items()])
+    file_dates = {}
+
     for filename in names:
-        # If the Zip entry is a special ODF file, store it with it's own attribute name
+        # If the Zip entry is a special ODF file, store it's own attribute name
         if filename in inverted:
             obj_dict[inverted[filename]] = zf.read(filename)
         else:
             obj_dict["additional"][filename] = zf.read(filename)
+        obj_dict["file_dates"][filename] = zf.getinfo(filename).date_time
     zf.close()
+
     obj = Document(**obj_dict)
     return obj
 
 
 def dump(doc, dst):
-    """Write the ODF attributes of the document a Zip file named dst."""
+    """Write the ODF content of doc to a Zip file named dst.
+
+    The output file is a full ODF file and readable by load() and OOo.
+    """
 
     import zipfile
     try:
-      zf = zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED)
+      zf = zipfile.ZipFile(dst, 'w')
     except IOError, e:
       raise WriteError(e)
 
     # Zip document attributes
     for key, filename in Document.files.items():
         if filename:
-            zf.writestr(filename, doc.getComponentAsString(key, encoding='utf-8'))
+            zipinfo = zipfile.ZipInfo(filename, doc.file_dates[filename])
+            content = doc.getComponentAsString(key, encoding='utf-8')
+            if len(content) != 0:
+                zipinfo.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(zipinfo, content)
 
     # Zip additional files
     for filename, content in doc.additional.items():
-        zf.writestr(filename, content)
+        zipinfo = zipfile.ZipInfo(filename, doc.file_dates[filename])
+        if len(content) != 0:
+            zipinfo.compress_type = zipfile.ZIP_DEFLATED
+        zf.writestr(zipinfo, content)
 
     zf.close()
 
 
 def loads(str):
+    """Return a Document representing the ODF file contents in binary str."""
+
     from cStringIO import StringIO
     src = StringIO(str)
     obj = load(src)
     src.close()
     return obj
 
+
 def dumps(doc):
+    """Return a binary string containing the ODF content of doc (Zip file)."""
+
     from cStringIO import StringIO
     dst = StringIO()
     dump(doc, dst)
@@ -227,16 +247,16 @@ def OdfToSqlite(filename):
         from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
 
     try:
-        file = open(filename,'rb')
+        f = open(filename,'rb')
     except IOError, e:
         raise ReadError(e)
-    doc = file.read()
-    file.close()
+    doc = f.read()
+    f.close()
     return sqlite.Binary(doc)
 
 
 def SqlToOdf(blob, filename=None):
-    """Save the binary string blob containing a zipped OpenDocument into filename.
+    """Save binary string blob containing a zipped OpenDocument into filename.
 
     Return a corresponding Document if filename is None.
     """
@@ -245,11 +265,11 @@ def SqlToOdf(blob, filename=None):
         return loads(blob)
 
     try:
-        file = open(filename,'wb')
+        f = open(filename,'wb')
     except IOError, e:
         raise WriteError(e)
-    file.write(blob)
-    file.close()
+    f.write(blob)
+    f.close()
 
 
 
@@ -262,8 +282,8 @@ def process_command_line():
   # as long as optional option values and negation are not implemented
   from optparse_optional import OptionalOptionParser
 
-  usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir2\.*\.od[ts] ]\n"
-  usage += __doc__
+  usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir3\.*\.od[ts] ]"
+  usage += os.linesep + __doc__
   parser = OptionalOptionParser(usage)
 
   parser.add_option("-d", "--directory", dest="directory", metavar="DIRECTORY",
@@ -278,6 +298,8 @@ def process_command_line():
                     help="Write to output FILE.")
   parser.add_option("--force", dest="force", action="store_true",
                     help="Force overwriting of output FILE.")
+  parser.add_option("-i", "--stdin", dest="stdin", action="store_true",
+                    help="Read from stdin in addition to input files.")
   parser.add_option("--list-authors", dest="list_author", action="store_true",
                     oargs=1, help="Print a list of authors for all input files\
                     [optional argument: output FILE].")
@@ -288,24 +310,27 @@ def process_command_line():
   parser.add_option("-r", "--replace", dest="replace", nargs=2,
                     metavar="SEARCH REPLACE",
                     help="Replace search string by replacement string.")
-  parser.add_option("--recursive", dest="recursive", action="store_true", oargs=1,
-                    help="Search directories recursively\
+  parser.add_option("--recursive", dest="recursive", action="store_true",
+                    oargs=1, help="Search directories recursively\
                     [optional argument: maximum recursion LEVEL].")
   parser.add_option("--selftest", dest="selftest", action="store_true",
                     help="Run the test suite.")
-  parser.add_option("--tohtml", dest="tohtml", action="store_true",
-                    help="Convert the document to HTML.")
-  parser.add_option("--toodf", dest="toodf", action="store_true",
-                    help="Convert the document to ODF.")
-  parser.add_option("--totext", dest="totext", action="store_true",
-                    help="Convert the document to plain text.")
-  parser.add_option("--toxml", dest="toxml", action="store_true",
-                    help="Convert the document to XML.")
+  parser.add_option("--tohtml", dest="tohtml", action="store_true", oargs=1,
+                    help="Convert the document to HTML\
+                    [optional argument: output FILE].")
+  parser.add_option("--toodf", dest="toodf", action="store_true", oargs=1,
+                    help="Convert the document to ODF\
+                    [optional argument: output FILE].")
+  parser.add_option("--totext", dest="totxt", action="store_true", oargs=1,
+                    help="Convert the document to plain text\
+                    [optional argument: output FILE].")
+  parser.add_option("--toxml", dest="toxml", action="store_true", oargs=1,
+                    help="Convert the document to XML\
+                    [optional argument: output FILE].")
   parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                     help="Print verbose status messages.")
 
-  # TODO: options.stdin
-  # TODO: options.pipe
+  # TODO: options.pipe ? Read one file from stdin and write to stdout
   # TODO: options.case_insensitive_file_search
   # TODO: options.encoding
 
@@ -329,12 +354,39 @@ def process_command_line():
 
   if options.selftest:
     import unittest, tests
-    testrunner = unittest.TextTestRunner(verbosity=verbosity)
+    stream = sys.stderr
+    if options.filename:
+      if not options.force and os.path.isfile(options.filename):
+        print_unicode(sys.stderr,
+                      u'Warning: Skipping already existing output file "%s"' %
+                      options.filename, encoding)
+        return
+      stream = open(options.filename, 'w')
+    elif options.stdout:
+      stream = sys.stdout
+    testrunner = unittest.TextTestRunner(stream=stream, verbosity=verbosity)
     testrunner.run(tests.test_suite())
+    if options.filename:
+      stream.close()
     return
 
   filter = ''
   files = []
+
+  stdin = ''
+  if options.stdin:
+    if not os.fstat(0)[6]:
+      print >>sys.stderr, 'Warning: No input file data on stdin (i.e. use',
+      print >>sys.stderr, '"cat a.ods | python odf.py --stdin").'
+    else:
+
+      try: # Windows needs stdio set for binary mode.
+        import msvcrt
+        msvcrt.setmode (0, os.O_BINARY) # stdin  = 0
+      except ImportError:
+        pass
+
+      stdin = sys.stdin.read()
 
   if isinstance(options.recursive, tuple):
     if not options.recursive[0]:
@@ -357,7 +409,7 @@ def process_command_line():
 
   files = unique(files)
 
-  if len(files) == 0:
+  if len(files) == 0 and not stdin:
     print >>sys.stderr, 'Warning: No input files given or found.'
     return
 
@@ -370,16 +422,23 @@ def process_command_line():
   try:
     authors = {}
     files = sorted(files)
+    if stdin:
+      files.insert(0, 'stdin')
+
     import zipfile
     for infile in files:
       if verbosity == 2:
         print_unicode(sys.stdout, u'Processing ' + infile, encoding)
 
       try:
-        doc = load(infile)
+        if stdin and 'stdin' == infile:
+          doc = loads(stdin)
+        else:
+          doc = load(infile)
       except zipfile.BadZipfile, e:
         print_unicode(sys.stderr, u'Warning: Skipping input file "' +
                       infile + '": ' + str(e), encoding)
+        stdin = ''
         continue
 
       content = {}
@@ -388,97 +447,111 @@ def process_command_line():
       if options.replace:
         changed = doc.replace(options.replace[0], options.replace[1])
 
-      if options.totext:
+      if parser.is_true(options.totxt):
         content['txt'] = doc.toText()
-      if options.tohtml:
+      if parser.is_true(options.tohtml):
         content['html'] = doc.toHtml(os.path.basename(infile))
-      if options.toxml:
+      if parser.is_true(options.toxml):
         content['xml'] = doc.toXml(encoding='utf-8')
-      if options.toodf or (changed and not content):
+      if parser.is_true(options.toodf) or (changed and not content):
         content['odf'] = dumps(doc)
       if parser.is_true(options.list_author):
         author = doc.getAuthor()
         if author:
-          if not authors.has_key(author):
+          if not author in authors:
             authors[author] = []
           authors[author].append(infile)
 
       if content:
-          for extension, output in content.items():
-            filename = infile
-            output_encoding = ''
+        for extension, output in content.items():
+          filename = infile
+          output_encoding = ''
 
-            if options.filename:
-              filename = options.filename
+          if options.filename:
+            filename = options.filename
 
-            if options.extension_append or options.extension_replace:
-              if 'odf' == extension:
-                extension_new = infile.split('.')[-1]
+          optional = getattr(options, 'to' + extension)
+          if isinstance(optional, tuple):
+            filename = optional[1]
+          elif options.extension_append or options.extension_replace:
+            if 'odf' == extension:
+              if stdin and 'stdin' == infile:
+                extension_new = unicode(doc.getExtension())
+                if not extension_new:
+                  extension_new = u'odf'
               else:
-                extension_new = unicode(extension)
-              if options.extension_append:
+                extension_new = infile.split('.')[-1]
+            else:
+              extension_new = unicode(extension)
+            if options.extension_append:
+              filename += u'.' + extension_new
+            else:
+              splitted = filename.split('.')
+              if len(splitted) == 1:
                 filename += u'.' + extension_new
               else:
-                filename = filename[:-3] + extension_new
+                filename = u'.'.join(splitted[:-1]) + u'.' + extension_new
 
-            if options.directory:
-              filename = os.path.join(options.directory, os.path.basename(filename))
+          if options.directory:
+            filename = os.path.join(options.directory,
+                                    os.path.basename(filename))
 
-            if filename == infile and (extension != 'odf' or not options.force):
-              if extension != 'odf':
-                if not options.stdout or options.filename:
-                  print_unicode(sys.stderr,
-                                u'Warning: Cannot overwrite input file with '\
-                                u'text content (pass --file, --extension-'\
-                                u'append or --extension-replace)', encoding)
-              elif changed:
+          if filename == infile and (extension != 'odf' or not options.force):
+            if extension != 'odf':
+              if not options.stdout or options.filename:
                 print_unicode(sys.stderr,
-                              u'Warning: Not allowed to overwrite input file (pass --force to allow)',
-                              encoding)
-
-            elif filename != infile and not options.force and os.path.isfile(filename):
+                              u'Warning: Cannot overwrite input file with '\
+                              u'text content (pass --file, --extension-'\
+                              u'append or --extension-replace)', encoding)
+            elif changed:
               print_unicode(sys.stderr,
-                            u'Warning: Skipping already ' \
-                            u'existing output file "%s"' % filename,
+                            u'Warning: Not allowed to overwrite input ' \
+                            u'file (pass --force to allow)', encoding)
+
+          elif filename != infile and not options.force and os.path.isfile(filename):
+            print_unicode(sys.stderr,
+                          u'Warning: Skipping already existing output ' \
+                          u'file "%s"' % filename, encoding)
+
+          else:
+            if options.force and verbosity == 2 and os.path.isfile(filename):
+              print_unicode(sys.stderr,
+                            u'Warning: Overwriting existing output file ' \
+                            u'"%s"' % filename, encoding)
+
+            if extension in ['xml','html']:
+              try:
+                outfile = open(filename, 'w')
+              except IOError, e:
+                raise WriteError(e)
+              output_encoding = 'utf-8'
+            elif extension == 'odf':
+              try:
+                outfile = open(filename, 'wb')
+              except IOError, e:
+                raise WriteError(e)
+            else:
+              try:
+                outfile = codecs.open(filename, 'w', encoding, 'replace')
+              except IOError, e:
+                raise WriteError(e)
+
+            if verbosity == 2:
+              print_unicode(sys.stdout,
+                            u'Writing %s to %s' % (extension, filename),
                             encoding)
 
-            else:
-              if options.force and verbosity == 2 and os.path.isfile(filename):
-                print_unicode(sys.stderr,
-                              u'Warning: Overwriting existing ' \
-                              u'output file "%s"' % filename,
-                              encoding)
+            try:
+              print >>outfile, output, # important: do not print linebreak!
+            finally:
+              outfile.close()
 
-              if extension in ['xml','html']:
-                try:
-                  outfile = open(filename, 'w')
-                except IOError, e:
-                  raise WriteError(e)
-                output_encoding = 'utf-8'
-              elif extension == 'odf':
-                try:
-                  outfile = open(filename, 'wb')
-                except IOError, e:
-                  raise WriteError(e)
-              else:
-                try:
-                  outfile = codecs.open(filename, 'w', encoding, 'replace')
-                except IOError, e:
-                  raise WriteError(e)
+          # TODO: allow ODF output to stdout with --pipe
+          if options.stdout and extension != 'odf':
+            print_unicode(sys.stdout, output, encoding, output_encoding)
 
-              if verbosity == 2:
-                print_unicode(sys.stdout,
-                              u'Writing %s to %s' % (extension, filename),
-                              encoding)
+      stdin = ''
 
-              try:
-                print >>outfile, output
-              finally:
-                outfile.close()
-
-            # TODO: allow ODF output to stdout with --pipe
-            if options.stdout and extension != 'odf':
-              print_unicode(sys.stdout, output, encoding, output_encoding)
 
     content = []
     for author in sorted(authors.keys()):
@@ -488,9 +561,9 @@ def process_command_line():
       else:
         filecount = unicode(count) + u' files'
       content.append(u'Author %s (%s):' % (author, filecount))
-      for file in authors[author]:
-        content.append(file)
-    output = u"\n".join(content)
+      for filename in authors[author]:
+        content.append(filename)
+    output = unicode(os.linesep).join(content)
 
     if output:
       # Shouldn't stdout be the default? '>' and '|' already exist as tools.
@@ -508,17 +581,16 @@ def process_command_line():
       if filename:
         if not options.force and os.path.isfile(filename):
           print_unicode(sys.stderr,
-                        u'Warning: Skipping already existing output file "%s"' % filename,
-                        encoding)
+                        u'Warning: Skipping already existing output file ' \
+                        u'"%s"' % filename, encoding)
         else:
           if verbosity == 2:
             if options.force and os.path.isfile(filename):
               print_unicode(sys.stderr,
-                            u'Warning: Overwriting existing output file "%s"' % filename,
-                            encoding)
+                            u'Warning: Overwriting existing output file ' \
+                            u'"%s"' % filename, encoding)
             print_unicode(sys.stdout,
-                          u'Writing author list to ' + filename,
-                          encoding)
+                          u'Writing author list to ' + filename, encoding)
           try:
             outfile = codecs.open(filename, 'w', encoding, 'replace')
           except IOError, e:
@@ -537,14 +609,17 @@ def process_command_line():
   except UnicodeError, e:
     if isinstance(e.object, unicode):
       import unicodedata
-      print >>sys.stderr, e, ' -> character name: "' + unicodedata.name(e.object[e.start]) + '"'
+      print >>sys.stderr, e, ' -> character name: "',
+      print >>sys.stderr, unicodedata.name(e.object[e.start]), '"'
     else:
-      print >>sys.stderr, e, ' -> character: "' + e.object[e.start] + '"'
+      print >>sys.stderr, e, ' -> character: "', e.object[e.start], '"'
     raise
   except ReadError, e:
-    print_unicode(sys.stderr, u'Could not read input file: ' + str(e), encoding)
+    print_unicode(sys.stderr, u'Could not read input file: %s' % str(e),
+                  encoding)
   except WriteError, e:
-    print_unicode(sys.stderr, u'Could not write output file: ' + str(e), encoding)
+    print_unicode(sys.stderr, u'Could not write output file: %s' % str(e),
+                  encoding)
 
 
 if __name__ == "__main__":

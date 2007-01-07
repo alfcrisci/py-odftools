@@ -1,9 +1,20 @@
-# as long as optional option values and negation are not implemented
+#!/usr/bin/env python
+# -*- coding: iso-8859-15 -*-
+
+"""This class integrates all patches to optparse.py into an extended version
+needed to provide processing of optional option arguments and option negation.
+
+The extension is tested with optparse 1.5a2 and 1.5.3 (Python 2.4.4 and 2.5.0)
+and should be used unless the author of optparse integrates the provided
+patches into the main optparse.
+
+"""
+
 from optparse import Option, OptionError, OptionParser, __version__ as optparse_version, _
 
 
 class OptionalOption(Option):
-    """Patch to Option which allows optional option values and negation."""
+    """Patch to Option which allows optional option arguments and negation."""
 
     def _check_nargs(self):
         try:
@@ -41,7 +52,7 @@ class OptionalOption(Option):
 
     # this is a general version to add all overwritten _check_ methods
     l = locals()
-    Option.CHECK_METHODS = [l.has_key(f.__name__) and l[f.__name__] or f
+    Option.CHECK_METHODS = [f.__name__ in l and l[f.__name__] or f
                             for i, f in enumerate(Option.CHECK_METHODS)]
     for a, f in l.items():
         if a.startswith('_check_') and f not in Option.CHECK_METHODS:
@@ -54,7 +65,7 @@ class OptionalOption(Option):
 
 
 class OptionalOptionParser(OptionParser):
-    """Patch to OptionParser which allows optional option values and negation."""
+    """Patch to OptionParser which allows optional arguments and negation."""
 
     def __init__(self, usage=None, option_list=None, option_class=Option,
                              version=None, conflict_handler="error", description=None,
@@ -66,7 +77,7 @@ class OptionalOptionParser(OptionParser):
         OptionParser.__init__(self, **kwargs)
 
     def _match_long_opt(self, opt):
-        if opt.startswith("--no-") and self._long_opt.has_key("--" + opt[5:]):
+        if opt.startswith("--no-") and "--" + opt[5:] in self._long_opt:
             return ("--" + opt[5:], True)
         return OptionParser._match_long_opt(self, opt)
 
@@ -169,6 +180,7 @@ class OptionalOptionParser(OptionParser):
 
 
     def is_true(self, opt_value):
+        """Return True if the (optional) boolean option value is True."""
         return isinstance(opt_value, tuple) and opt_value[0] or opt_value
 
 

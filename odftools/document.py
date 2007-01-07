@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: iso-8859-15 -*-
 
 """ The document object, for containing the document in memory
 and to be used as the intermediate step for all operations.
@@ -9,7 +10,7 @@ should do.
 
 """
 
-import os
+import os, sys
 import xml.dom.minidom as dom
 
 
@@ -19,6 +20,7 @@ odf_formats = {'odt':'text', 'ods':'spreadsheet', 'odp':'presentation',
                'odm':'text-master', 'ott':'text-template',
                'ots':'spreadsheet-template', 'otp':'presentation-template',
                'otg':'graphics-template'}
+odf_prefix = "application/vnd.oasis.opendocument."
 
 
 class ReCompileError(Exception):
@@ -47,7 +49,7 @@ class Document:
             settings='',   # Use is specific to the application
             meta='',       # Metadata
             additional={}, # additional files (i.e. images)
-            **kwords       # Other files in META-INF
+            file_dates={}  # file dates for all files and directories
             ):
 
         # Get all method parameters
@@ -63,13 +65,14 @@ class Document:
                 try:
                     setattr(self, key, dom.parseString(args[key]))
                 except Exception, e:
-                    print args[key]
-                    print e
+                    print >>sys.stderr, sysargs[key]
+                    print >>sys.stderr, e
 
         # Store additional files
-        self.additional = {}
-        for filename, content in args["additional"].items():
-            self.additional[filename] = content
+        self.additional = additional
+
+        # Store file dates
+        self.file_dates = file_dates
 
         if not hasattr(self, 'file'):
             self.file = None
@@ -140,6 +143,12 @@ class Document:
         return author
 
 
+    def getExtension(self):
+        """Return ODF extension for given mimetype."""
+
+        return get_extension(self.mimetype)
+
+
     # Convert the document to other formats
 
     def toXml(self, pretty_printing=False, encoding=None):
@@ -155,7 +164,7 @@ class Document:
         textlist = [node.data for node in doc_order_iter(self.content)
                     if node.nodeType == node.TEXT_NODE
                     and (not skip_blank_lines or 0 != len(node.data.strip()))]
-        return u"\n".join(textlist)
+        return unicode(os.linesep).join(textlist)
 
 
     def toHtml(self, title="", encoding="utf-8"):
@@ -182,7 +191,7 @@ class Document:
         htmllist = ["<p>%s</p>" % node.data.encode(encoding)
                     for node in doc_order_iter(self.content)
                     if node.nodeType == node.TEXT_NODE]
-        values["body"] = "\n".join(htmllist)
+        values["body"] = unicode(os.linesep).join(htmllist)
 
         values["meta"] = "" # TODO
         values["styles"] = "" # TODO
@@ -211,7 +220,7 @@ class Document:
             search = lambda x, y: find(x, y)
 
         except (sre_constants.error, TypeError), v:
-            print 'Warning: could not compile regular expression:', v
+            print >>sys.stderr, 'Warning: could not compile regular expression:', v
             return 0
         count = 0
         for node in doc_order_iter(self.content):
@@ -222,7 +231,7 @@ class Document:
                         node.data = replaced
                         count += 1
                 except (sre_constants.error, TypeError), v:
-                    print 'Warning: could not compile regular expression:', v
+                    print >>sys.stderr, 'Warning: could not compile regular expression:', v
                     return 0
         return count
 
@@ -257,7 +266,7 @@ def get_search_for_filter(filter):
                 find = re.compile(filter).search
             search = lambda x: find(x)
         except (sre_constants.error, TypeError), v:
-            # print 'Warning: could not compile regular expression:', v
+            # print >>sys.stderr, 'Warning: could not compile regular expression:', v
             # search = lambda x: False
             raise ReCompileError(v)
     else:
@@ -282,13 +291,14 @@ def list_directory(directory, filter=None, recursive=False, must_be_directory=Fa
     if must_be_directory and not os.path.isdir(directory):
         return []
 
+    _pathsep = os.sep # faster path processing
     prefix = u''
     if not directory:
         directory = '.'
     else:
         prefix += directory
         if prefix[-1] not in "/\\":
-            prefix += os.path.sep
+            prefix += _pathsep
 
     if os.path.isfile(prefix + filter):
         return [prefix + filter]
@@ -302,8 +312,8 @@ def list_directory(directory, filter=None, recursive=False, must_be_directory=Fa
 
     found_files = []
     root = os.path.abspath(unicode(directory))
-    root_level = root.count(os.path.sep)
-    if os.path.sep == root[-1]:
+    root_level = root.count(_pathsep)
+    if _pathsep == root[-1]:
         root_level -= 1
     for root, dirs, files in os.walk(unicode(directory)):
         files = [directory == '.' and os.path.join(root, f)[2:] or
@@ -311,8 +321,8 @@ def list_directory(directory, filter=None, recursive=False, must_be_directory=Fa
                  search_odf(f)]
         found_files.extend(files)
 
-        level = root.count(os.path.sep) - root_level
-        if os.path.sep == root[-1]:
+        level = root.count(_pathsep) - root_level
+        if _pathsep == root[-1]:
             level -= 1
 
         if not recursive or \
@@ -328,8 +338,9 @@ def get_path_and_filter(directory, test_existence=True):
     path = ''
     filter = ''
 
+    _pathsep = os.sep # faster path processing
     if len(directory) == 1 and directory[0] in r"\/":
-        path = os.path.sep
+        path = _pathsep
 
     elif test_existence and os.path.isdir(directory):
         path = directory
@@ -340,7 +351,7 @@ def get_path_and_filter(directory, test_existence=True):
         search_path_separator = re.compile(r'[/\\]')
         splitted = search_path_separator.split(directory, 1)
         if directory[0] in r"\/":
-            first_directory = os.path.sep
+            first_directory = _pathsep
         else:
             first_directory = get_win_root_directory(splitted[0])
 
@@ -352,18 +363,18 @@ def get_path_and_filter(directory, test_existence=True):
                 if len(splitted) == 1:
                     return ('', directory)
                 raise PathNotFoundError('Path does not exist: ' + first_directory)
-            if first_directory != os.path.sep:
+            if first_directory != _pathsep:
                 path += splitted[0]
             splitted = search_path_separator.split(splitted[1], 1)
-            check_path = path + os.path.sep + splitted[0]
+            check_path = path + _pathsep + splitted[0]
             while len(splitted) == 2:
                 if test_existence and not os.path.isdir(check_path):
                     raise PathNotFoundError('Path does not exist: ' + check_path)
                 path = check_path
                 splitted = search_path_separator.split(splitted[1], 1)
-                check_path = path + os.path.sep + splitted[0]
-            if len(path) == 0 and first_directory == os.path.sep:
-                path = os.path.sep
+                check_path = path + _pathsep + splitted[0]
+            if len(path) == 0 and first_directory == _pathsep:
+                path = _pathsep
                 filter = directory[1 :]
             else:
                 filter = directory[len(path)+1 :]
@@ -377,7 +388,7 @@ def get_path_and_filter(directory, test_existence=True):
 def get_win_root_directory(directory):
     """Return windows root directory with path separator, otherwise unchanged."""
     if len(directory) == 2 and directory[1] == ':':
-        return directory + os.path.sep
+        return directory + os.sep
     return directory
 
 
@@ -396,19 +407,31 @@ def list_intersect(needles, haystack):
     return [e for e in haystack if e in needles]
 
 
-def get_encoding(file):
+def get_extension(mimetype):
+    """Return ODF extension for given mimetype."""
+
+    if mimetype.startswith(odf_prefix):
+        _mimetype = mimetype[len(odf_prefix):]
+
+        for extension, mimetype in odf_formats.items():
+            if mimetype == _mimetype:
+                return extension
+
+    return ''
+
+
+
+def get_encoding(filename):
     """Return the current encoding of the given file."""
     # TODO: support sys.stdout
-    encoding = getattr(file, "encoding", None)
+    encoding = getattr(filename, "encoding", None)
     if not encoding:
-        import sys
         encoding = sys.getdefaultencoding()
     return encoding
 
 
 def print_unicode(outfile, output, encoding=None, output_encoding=None):
     """Print output to stdout and tries different encodings if necessary."""
-    import sys
     try:
         if output_encoding:
             output = output.decode(output_encoding)

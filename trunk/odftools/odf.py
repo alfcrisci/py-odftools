@@ -25,6 +25,14 @@ So * would find odc, odf, odg, odi, odm, odp, ods, odt, otg, otp, ots, ott.
 The optional argument LEVEL specifies the maximum recursion level.
 For every file filter the current folder is the start directory.
 
+--include FILE: all found files must match the include FILE pattern.
+--exclude FILE: all found files must not match the exclude FILE pattern
+(after they have matched the --include FILE pattern).
+
+--case-insensitive ignores case for every file name matching, except directory
+parts of file arguments on case-sensitive operating systems like UNIX
+(use --include instead).
+
 One or multiple actions can be done separately to each input file.
 Each different output action results in an output file.
 
@@ -69,12 +77,12 @@ eventually writing output files.
 The optional argument FILE specifies the output file name.
 
 
-For the time being you can provide all options and arguments in any order:
-python odf.py --list-authors --toxml dir/a*.ods --totext --extension-append
+The preferred order is to pass the file pattern arguments first, then options:
+python odf.py dir/a*.ods --list-authors authors.txt --toxml --extension-append
 
-Except option parameters have to follow their options directly:
-python odf.py --replace s([e])arch r\\1place /*.od[ts]
-python odf.py a.odt --file dir/a.html --tohtml
+Especially (optional) option arguments have to follow their options directly:
+python odf.py /*.od[ts] --replace s([e])arch r\\1place
+python odf.py a.odt --tohtml dir/output.html dir/search*.odg
 
 
 Examples:
@@ -84,16 +92,19 @@ Examples:
 python odf.py /* --replace s r --totext --stdout
 
 # Replace text, convert to HTML and save with appended .html extension.
-python odf.py * --replace s r --tohtml --extension-append
+python odf.py / --replace s r --tohtml --extension-append
 
 # Search recursively, replace text and overwrite only changed input files.
-python odf.py . --replace s r --recursive --force
+python odf.py * --replace s r --recursive --force
 
 # Search recursively, replace text and overwrite all input files.
 python odf.py . --replace s r --recursive --force --toodf
 
 # Search recursively (maximum 2 levels), print authors to stdout and file.
 python odf.py /a* /b/c* --recursive 2 --list-authors authors.txt --stdout
+
+# Search multiple directories recursively, filtering by include and exclude
+python odf.py /dir1 /dir2/dir3 --recursive 2 --include job --exclude work -v
 
 # Convert document to HTML and text and save with different file names.
 python odf.py a.odt --tohtml b.htm --totext c.log --file=for_unspecified_opts
@@ -282,12 +293,17 @@ def process_command_line():
   # as long as optional option values and negation are not implemented
   from optparse_optional import OptionalOptionParser
 
-  usage = "%prog [options] [ file1 dir1 dir2/glob*.od? dir3\.*\.od[ts] ]"
+  usage = "%prog [ file1 dir1 dir2/glob*.od? dir3\.*\.od[ts] ] [options]"
   usage += os.linesep + __doc__
   parser = OptionalOptionParser(usage)
 
-  parser.add_option("-d", "--directory", dest="directory", metavar="DIRECTORY",
+  parser.add_option("--case-insensitive", dest="ignorecase",
+                    action="store_true",
+                    help="Ignore case for every file name matching.")
+  parser.add_option("-d", "--directory", dest="directory",
                     help="Write all output files to DIRECTORY.")
+  parser.add_option("--exclude", dest="exclude", metavar="FILE", nargs=1,
+                    help="Found files must not match the exclude FILE pattern.")
   parser.add_option("--extension-append", dest="extension_append",
                     action="store_true",
                     help="Append an extension to each output FILE.")
@@ -299,10 +315,14 @@ def process_command_line():
   parser.add_option("--force", dest="force", action="store_true",
                     help="Force overwriting of output FILE.")
   parser.add_option("-i", "--stdin", dest="stdin", action="store_true",
-                    help="Read from stdin in addition to input files.")
+                    oargs=1, metavar="[FILE]",
+                    help="Read one file from stdin before other input files\
+                    [optional argument: output FILE].")
+  parser.add_option("--include", dest="include", metavar="FILE", nargs=1,
+                    help="Found files must match the include FILE pattern.")
   parser.add_option("--list-authors", dest="list_author", action="store_true",
                     oargs=1, help="Print a list of authors for all input files\
-                    [optional argument: output FILE].")
+                    [optional argument: output FILE].", metavar="[FILE]")
   parser.add_option("-o", "--stdout", dest="stdout", action="store_true",
                     help="Write to stdout in addition to output FILE.")
   parser.add_option("-q", "--quiet", dest="quiet", action="store_true",
@@ -311,27 +331,27 @@ def process_command_line():
                     metavar="SEARCH REPLACE",
                     help="Replace search string by replacement string.")
   parser.add_option("--recursive", dest="recursive", action="store_true",
-                    oargs=1, help="Search directories recursively\
+                    oargs=1, metavar="[LEVEL]",
+                    help="Search directories recursively\
                     [optional argument: maximum recursion LEVEL].")
   parser.add_option("--selftest", dest="selftest", action="store_true",
                     help="Run the test suite.")
   parser.add_option("--tohtml", dest="tohtml", action="store_true", oargs=1,
-                    help="Convert the document to HTML\
+                    metavar="[FILE]", help="Convert the document to HTML\
                     [optional argument: output FILE].")
   parser.add_option("--toodf", dest="toodf", action="store_true", oargs=1,
-                    help="Convert the document to ODF\
+                    metavar="[FILE]", help="Convert the document to ODF\
                     [optional argument: output FILE].")
   parser.add_option("--totext", dest="totxt", action="store_true", oargs=1,
-                    help="Convert the document to plain text\
+                    metavar="[FILE]", help="Convert the document to plain text\
                     [optional argument: output FILE].")
   parser.add_option("--toxml", dest="toxml", action="store_true", oargs=1,
-                    help="Convert the document to XML\
+                    metavar="[FILE]", help="Convert the document to XML\
                     [optional argument: output FILE].")
   parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                     help="Print verbose status messages.")
 
   # TODO: options.pipe ? Read one file from stdin and write to stdout
-  # TODO: options.case_insensitive_file_search
   # TODO: options.encoding
 
   import sys, codecs
@@ -374,7 +394,7 @@ def process_command_line():
   files = []
 
   stdin = ''
-  if options.stdin:
+  if parser.is_true(options.stdin):
     if not os.fstat(0)[6]:
       print >>sys.stderr, 'Warning: No input file data on stdin (i.e. use',
       print >>sys.stderr, '"cat a.ods | python odf.py --stdin").'
@@ -382,7 +402,7 @@ def process_command_line():
 
       try: # Windows needs stdio set for binary mode.
         import msvcrt
-        msvcrt.setmode (0, os.O_BINARY) # stdin  = 0
+        msvcrt.setmode (0, os.O_BINARY) # stdin = 0
       except ImportError:
         pass
 
@@ -405,7 +425,9 @@ def process_command_line():
           print_unicode(sys.stderr, u'Warning: Skipping input file "' + arg +
                         '":' + str(e), encoding)
       else:
-        files.extend(list_directory(path, filter, options.recursive))
+        files.extend(list_directory(path, filter, options.ignorecase,
+                                    options.recursive, False, options.include,
+                                    options.exclude))
 
   files = unique(files)
 
@@ -473,6 +495,8 @@ def process_command_line():
           optional = getattr(options, 'to' + extension)
           if isinstance(optional, tuple):
             filename = optional[1]
+          elif stdin and isinstance(options.stdin, tuple):
+            filename = options.stdin[1]
           elif options.extension_append or options.extension_replace:
             if 'odf' == extension:
               if stdin and 'stdin' == infile:
@@ -546,7 +570,6 @@ def process_command_line():
             finally:
               outfile.close()
 
-          # TODO: allow ODF output to stdout with --pipe
           if options.stdout and extension != 'odf':
             print_unicode(sys.stdout, output, encoding, output_encoding)
 

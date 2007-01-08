@@ -34,6 +34,9 @@ class OptionalOption(Option):
                 return self.check_value(opt, value)
         return Option.convert_value(self, opt, value)
 
+    def takes_value(self):
+        return self.type is not None or self.nargs or self.oargs
+
     def take_action(self, action, dest, opt, value, values, parser):
         if action in ["store_true", "store_false"]:
             _value = (action == "store_true") ^ self.negate
@@ -77,8 +80,8 @@ class OptionalOptionParser(OptionParser):
         OptionParser.__init__(self, **kwargs)
 
     def _match_long_opt(self, opt):
-        if opt.startswith("--no-") and "--" + opt[5:] in self._long_opt:
-            return ("--" + opt[5:], True)
+        if opt.startswith("--no-"):
+            return (OptionParser._match_long_opt(self, "--" + opt[5:]), True)
         return OptionParser._match_long_opt(self, opt)
 
     def _process_long_opt(self, rargs, values):
@@ -94,17 +97,22 @@ class OptionalOptionParser(OptionParser):
             opt = arg
             had_explicit_value = False
 
+        arg = opt
         opt = self._match_long_opt(opt)
         if isinstance(opt, tuple):
             negate = opt[1]
             opt = opt[0]
         else:
             negate = False
+        if arg != opt and not arg.startswith("--no-"):
+            import sys
+            print >>sys.stderr, 'Warning: assuming %s for given option %s' % \
+                  (opt, arg)
         option = self._long_opt[opt]
         option.negate ^= negate
         nargs = option.nargs or 0
         oargs = option.oargs or 0
-        if option.takes_value() or nargs or oargs:
+        if option.takes_value():
             oargs += nargs
             args = self._get_arguments(rargs)
             if len(args) < nargs:
@@ -147,7 +155,7 @@ class OptionalOptionParser(OptionParser):
 
             nargs = option.nargs or 0
             oargs = option.oargs or 0
-            if option.takes_value() or nargs or oargs:
+            if option.takes_value():
                 # Any characters left in arg?    Pretend they're the
                 # next arg, and stop consuming characters of arg.
                 if i < len(arg):

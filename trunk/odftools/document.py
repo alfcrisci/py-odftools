@@ -102,7 +102,7 @@ class Document:
         return attr.toxml(encoding)
 
 
-    def getEmbeddedObjects(self, filter=None):
+    def getEmbeddedObjects(self, filter=None, ignore_case=False):
         """Return a dictionary of the objects embedded in the document.
 
         A more general form of getImages. By default, this should return
@@ -114,7 +114,7 @@ class Document:
         """
 
         # TODO: support other embedded objects
-        search = get_search_for_filter(filter)
+        search = get_search_for_filter(filter, ignore_case)
         return dict([(filename[9:], content)
                     for filename, content in self.additional.items()
                     if 'Pictures/' == filename[:9]
@@ -239,7 +239,7 @@ class Document:
 # ----------------------------------------------------------------------------
 # Global functions for search, navigation,  etc.
 
-def get_search_for_filter(filter):
+def get_search_for_filter(filter, ignore_case=False, limit_glob=True, none_value=True):
     """Return a search function for the given filter.
 
     Any filter not containing an escaped dot ("\.") and containing at least one
@@ -251,17 +251,30 @@ def get_search_for_filter(filter):
     line. In addition, some regular expressions containing characters like the
     pipe symbol "|" must be enclosed by string separators.
 
+    limit_glob adds ^ and $ modifiers to globs (default).
+    none_value specifies the return value if filter is empty.
+
     """
     if filter:
         import re, sre_constants
         try:
+            # filter = re.escape(filter)
+            if os.sep == '\\':
+                filter = filter.replace('/', '\\\\')
+
+            if filter[-1] == '\\' and (len(filter) == 1 or filter[-2] != '\\'):
+                filter += '\\'
+
             if is_glob(filter):
                 s = filter.replace('.', r'\.').replace('*', '.*').replace('?', '.')
-                if filter[0] != '*':
+                if limit_glob and filter[0] != '*':
                     s = '^' + s
-                if filter[-1] != '*':
+                if limit_glob and filter[-1] != '*':
                     s += '$'
-                find = re.compile(s).search
+
+                filter = s
+            if ignore_case:
+                find = re.compile(filter, re.IGNORECASE).search
             else:
                 find = re.compile(filter).search
             search = lambda x: find(x)
@@ -270,7 +283,7 @@ def get_search_for_filter(filter):
             # search = lambda x: False
             raise ReCompileError(v)
     else:
-        search = lambda x: True
+        search = lambda x: none_value
 
     return search
 
@@ -280,11 +293,21 @@ def is_glob(filter):
     return not r'\.' in filter and [c for c in '*[]?.' if c in filter]
 
 
-def list_directory(directory, filter=None, recursive=False, must_be_directory=False):
+def list_directory(directory, filter=None, ignore_case=False, recursive=False,
+                   must_be_directory=False, include=None, exclude=None):
     """Scan a directory for ODF files.
+
+    filter may be a relative or absolute directory or filename, a glob and/or
+    a regular expression. After a file was found by the filter, it must match
+    a ODF file extension.
 
     If recursive is an int, 0 is equivalent to False (no recursion).
     Any positive int limits the maximum recursion level.
+
+    include and exclude may be a relative or absolute directory or filename, a
+    glob and/or a regular expression.
+    Every file that was found by the filter, must match include and must not
+    match exclude (in this order).
     """
 
     directory = get_win_root_directory(directory)
@@ -306,9 +329,12 @@ def list_directory(directory, filter=None, recursive=False, must_be_directory=Fa
     if not os.path.isdir(directory):
         return []
 
-    search_user = get_search_for_filter(filter)
+    search_user = get_search_for_filter(filter, ignore_case)
     odf_extensions = r".*\.(?:" + "|".join(odf_formats.keys()) + ")$"
-    search_odf = get_search_for_filter(odf_extensions)
+    search_odf = get_search_for_filter(odf_extensions, ignore_case)
+
+    search_include = get_search_for_filter(include, ignore_case, False)
+    search_exclude = get_search_for_filter(exclude, ignore_case, False, False)
 
     found_files = []
     root = os.path.abspath(unicode(directory))
@@ -319,7 +345,10 @@ def list_directory(directory, filter=None, recursive=False, must_be_directory=Fa
         files = [directory == '.' and os.path.join(root, f)[2:] or
                  os.path.join(root, f) for f in files if search_user(f) and
                  search_odf(f)]
-        found_files.extend(files)
+        if files:
+            files = [f for f in files if search_include(f) and
+                     not search_exclude(f)]
+            found_files.extend(files)
 
         level = root.count(_pathsep) - root_level
         if _pathsep == root[-1]:
@@ -339,7 +368,10 @@ def get_path_and_filter(directory, test_existence=True):
     filter = ''
 
     _pathsep = os.sep # faster path processing
-    if len(directory) == 1 and directory[0] in r"\/":
+    if _pathsep == '\\':
+        directory = directory.replace('/', '\\')
+
+    if len(directory) == 1 and directory == _pathsep:
         path = _pathsep
 
     elif test_existence and os.path.isdir(directory):

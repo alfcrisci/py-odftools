@@ -37,14 +37,18 @@ _If the problem is specific, consider using the issues tracking system._
   * Per-word diffing of `contents.xml` from each file is a good place to start; `styles.xml` is also worthwhile. The user should be able to select which components are included in the diff operation beween ODF files. 
   * ENH: Re-implement "track changes" as a diff patch to be included in the ODF file.
 
+*Merge/Concatenate/Generate*
+ * Command-line syntax could take the general form of a Python list comprehension. Automatically extract DOM nodes from each input document and join the output list of nodes into a new document.
+   {{{
+   [some_transform(node) for node in some_filter(input_file_1, input_file_2)]
+   }}}
 
-*Document templating system*
-  * e.g. set up an interface for generating new documents with a predetermined set of styles, including headers, footers etc.
-  * Also make an interface for generating reports using this system.
+ * *Document templating system*
+    * e.g. set up an interface for generating new documents with a predetermined set of styles, including headers, footers etc.
+    * Also make an interface for generating reports using this system.
 
 
 *Nice to have:*
-  * Determine document type (in case of wrong filename extension).
   * Clean up styles: If two or more styles have the same attributes, pick one name for all of them and delete the other styles.
 
 
@@ -54,3 +58,5 @@ _If the problem is specific, consider using the issues tracking system._
   * Rob Weir's proposal for an OpenDocument Developer's Kit: [http://opendocument.xml.org/node/154]
 
   * Bob Sutor's Dr. ODF project/blog series: [http://www.sutor.com/newsite/blog-open/?cat=93]
+
+

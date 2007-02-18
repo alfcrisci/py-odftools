@@ -35,7 +35,7 @@ class PathNotFoundError(Exception):
 class Document:
     """The ODF document object."""
 
-    # map attribute names to file names
+    # Map attribute names to file names
     files={'mimetype': 'mimetype', 'content': 'content.xml', 'manifest':
             'META-INF/manifest.xml', 'styles': 'styles.xml', 'settings':
             'settings.xml', 'meta': 'meta.xml'}
@@ -176,34 +176,53 @@ class Document:
         values = {}
 
         import codecs
-        # TODO: Support other encodings than UTF-8, and maybe Unicode
-        values["title"] = unicode(title).encode(encoding) # Title for the page, if applicable
-        bodyList = [] # the lines to insert into the body of the document
-        # Not implemented yet:
-        metaList = []   # Meta tags for the header
-        styleList = []  # Stylesheet elements
+        # TODO: Support encodings other than UTF-8, and maybe Unicode
 
-        # Extract the body of the HTML document
-        # TODO: Include class, name/id, and an appropriate tag (not necessarily p) for each line:
-        #   <%s class="%s" name="%s">%s</%s> % (tag, class, name, content, tag)
-        # Use a reference table for the content.xml -> html conversion, and another for styles.xml -> css
-        # Also: images, tables, hyperlinks
-        htmllist = ["<p>%s</p>" % node.data.encode(encoding)
+        # Title for the page, if applicable
+        values["title"] = unicode(title).encode(encoding) 
+
+        # Extract the body of the HTML document from content
+        bodylist = [self.content_to_html_node(node)
                     for node in doc_order_iter(self.content)
                     if node.nodeType == node.TEXT_NODE]
-        values["body"] = unicode(os.linesep).join(htmllist)
+        values["body"] = unicode(os.linesep).join(bodylist).encode(encoding)
 
-        values["meta"] = "" # TODO
-        values["styles"] = "" # TODO
+        # Meta tags for the header
+        metalist = [] # TODO
+        values["meta"] = unicode(os.linesep).join(bodylist).encode(encoding)
+
+        # Stylesheet elements
+        stylelist = [] # TODO: convert styles.xml to CSS
+        values["styles"] = unicode(os.linesep).join(bodylist).encode(encoding)
 
         # Apply values to the HTML template
-        f = codecs.open(os.path.dirname(__file__) + "/template.html", 'r', encoding, 'xmlcharrefreplace')
-        htmlTemplate = f.read()
+        f = codecs.open(os.path.join(os.path.dirname(__file__), "template.html"), 
+                        'r', encoding, 'xmlcharrefreplace')
+        htmlTemplate = f.read().encode(encoding)
         f.close()
-
-        htmlTemplate = htmlTemplate.encode(encoding)
-
         return htmlTemplate % values
+
+    def content_to_html_node(self, node):
+        """Convert a node of content to HTML.
+
+        These tags should be enough to structure the document in HTML:
+            p
+            h1
+            span
+            a
+            img
+            table, tr, td
+
+        """
+        # TODO: Include class, name/id, and an appropriate tag (not necessarily p) for each line:
+        #   <%s class="%s" name="%s">%s</%s> % (tag, class, name, content, tag)
+        return "<p>%s</p>" % node.data
+
+    def meta_to_head_node(self, node):
+        pass
+
+    def styles_to_css_node(self, node):
+        pass
 
 
     def replace(self, search, replace):

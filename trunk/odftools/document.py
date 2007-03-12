@@ -68,15 +68,11 @@ class Document:
                     print >>sys.stderr, sysargs[key]
                     print >>sys.stderr, e
 
-        # Store additional files
         self.additional = additional
-
-        # Store file dates
         self.file_dates = file_dates
 
         if not hasattr(self, 'file'):
             self.file = None
-
 
     def __del__(self):
         """Unlink each DOM component."""
@@ -85,7 +81,7 @@ class Document:
             if not isinstance(attr, basestring):
                 attr.unlink()
 
-
+    # ---------------------------
     # Extract objects from the document
 
     def getComponentAsString(self, component_name, pretty_printing=False,
@@ -100,7 +96,6 @@ class Document:
         if pretty_printing:
             return attr.toprettyxml(encoding)
         return attr.toxml(encoding)
-
 
     def getEmbeddedObjects(self, filter=None, ignore_case=False):
         """Return a dictionary of the objects embedded in the document.
@@ -120,7 +115,6 @@ class Document:
                     if 'Pictures/' == filename[:9]
                     and search(filename[9:])])
 
-
     def getElementsByType(self, elementtype):
         """Extract all elements of a given type from the document.
 
@@ -129,10 +123,8 @@ class Document:
         """
         pass
 
-
     def getAuthor(self):
         """Return the author of this document if available."""
-
         author = ''
         if self.meta:
             for node in self.meta.getElementsByTagName("dc:creator"):
@@ -142,22 +134,18 @@ class Document:
 
         return author
 
-
     def getExtension(self):
         """Return ODF extension for given mimetype."""
-
         return get_extension(self.mimetype)
 
-
+    # ---------------------------
     # Convert the document to other formats
 
     def toXml(self, pretty_printing=False, encoding=None):
         """Return the content of the document as a XML Unicode string."""
-
         if pretty_printing:
             return self.content.toprettyxml(encoding)
         return self.content.toxml(encoding)
-
 
     def toText(self, skip_blank_lines=True):
         """Return the content of the document as a plain-text Unicode string."""
@@ -166,64 +154,51 @@ class Document:
                     and (not skip_blank_lines or 0 != len(node.data.strip()))]
         return unicode(os.linesep).join(textlist)
 
-
     def toHtml(self, title="", encoding="utf-8"):
-        """Return an UTF-8 encoded HTML representation of the document.
+        """Return an UTF-8 encoded HTML representation of the document."""
+        # TODO: 
+        # - Scrape up meta tags and add to headnode
+        #     '<meta http-equiv="content-type" content="text/html; charset=UTF-8">'
+        #     '<meta type="Generator" content="python-odftools" />'
+        # - Title for the page, if applicable
+        # - Convert self.styles to CSS and add to headnode as a <style type="text/css"> element
+        #     - see cssutils at the Python cheeseshop
+        # - Fix the unit test
+        #
+        # ENH: 
+        # - Support encodings other than UTF-8, and maybe Unicode
+        # - Allow named elements
+        # - A more natural way of doing the doctype declaration, if possible
 
-        The current version of this function is essentially the same as toText.
+        attrs_odf2html = {"style-name": "class"}
+        tags_odf2html = { 
+                "a": "a",
+                "body": "body",
+                "p": "p",
+                "span": "span",
+                "table": "table",
+                "h": "h1",
+                "table-row": "tr",
+                "table-cell": "td",
+                "image": "img",
+                "list": "ol",
+                "list-item": "li" }
 
-        """
-        values = {}
+        htmldoc = dom.parseString('<html />')
+        headnode = htmldoc.firstChild.appendChild(htmldoc.createElement("head"))
+        # TODO: add nodes to the head as needed
 
-        import codecs
-        # TODO: Support encodings other than UTF-8, and maybe Unicode
+        docbody = self.content.getElementsByTagName("office:body")
+        if docbody.length:
+            bodynode = translate_nodes(docbody.item(0), tags_odf2html, attrs_odf2html)
+        else:
+            bodynode = htmldoc.createElement("body")
+        htmldoc.firstChild.appendChild(bodynode)
 
-        # Title for the page, if applicable
-        values["title"] = unicode(title).encode(encoding) 
-
-        # Extract the body of the HTML document from content
-        bodylist = [self.content_to_html_node(node)
-                    for node in doc_order_iter(self.content)
-                    if node.nodeType == node.TEXT_NODE]
-        values["body"] = unicode(os.linesep).join(bodylist).encode(encoding)
-
-        # Meta tags for the header
-        metalist = [] # TODO
-        values["meta"] = unicode(os.linesep).join(bodylist).encode(encoding)
-
-        # Stylesheet elements
-        stylelist = [] # TODO: convert styles.xml to CSS
-        values["styles"] = unicode(os.linesep).join(bodylist).encode(encoding)
-
-        # Apply values to the HTML template
-        f = codecs.open(os.path.join(os.path.dirname(__file__), "template.html"), 
-                        'r', encoding, 'xmlcharrefreplace')
-        htmlTemplate = f.read().encode(encoding)
-        f.close()
-        return htmlTemplate % values
-
-    def content_to_html_node(self, node):
-        """Convert a node of content to HTML.
-
-        These tags should be enough to structure the document in HTML:
-            p
-            h1
-            span
-            a
-            img
-            table, tr, td
-
-        """
-        # TODO: Include class, name/id, and an appropriate tag (not necessarily p) for each line:
-        #   <%s class="%s" name="%s">%s</%s> % (tag, class, name, content, tag)
-        return "<p>%s</p>" % node.data
-
-    def meta_to_head_node(self, node):
-        pass
-
-    def styles_to_css_node(self, node):
-        pass
-
+        htmldoc.normalize() # Is this how normalize is used? Do on every level?
+        htmlstr = htmldoc.toprettyxml(indent="    ", encoding=encoding).split("\n", 1)[1]
+        doctypestr = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">\n'
+        return "%s\n%s" % (doctypestr, htmlstr)
 
     def replace(self, search, replace):
         """Replace all occurences of search in content by replace.
@@ -312,6 +287,9 @@ def is_glob(filter):
     return not r'\.' in filter and [c for c in '*[]?.' if c in filter]
 
 
+# ---------------------------
+# OS/filesystem navigation
+
 def list_directory(directory, filter=None, ignore_case=False, recursive=False,
                    must_be_directory=False, include=None, exclude=None):
     """Scan a directory for ODF files.
@@ -327,8 +305,8 @@ def list_directory(directory, filter=None, ignore_case=False, recursive=False,
     glob and/or a regular expression.
     Every file that was found by the filter, must match include and must not
     match exclude (in this order).
-    """
 
+    """
     directory = get_win_root_directory(directory)
     if must_be_directory and not os.path.isdir(directory):
         return []
@@ -382,7 +360,6 @@ def list_directory(directory, filter=None, ignore_case=False, recursive=False,
 
 def get_path_and_filter(directory, test_existence=True):
     """Return tuple containing the validated path and file filter."""
-
     path = ''
     filter = ''
 
@@ -443,34 +420,18 @@ def get_win_root_directory(directory):
     return directory
 
 
-# http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/52560
-def unique(seq):
-    """Return a unique list of the sequence elements."""
-
-    d = {}
-    return [d.setdefault(e,e) for e in seq if e not in d]
-
-
-def list_intersect(needles, haystack):
-    """Return a list of all needles which are in haystack list.
-
-    Result is like [e for e in output.keys() if e in ['xml','html']]."""
-    return [e for e in haystack if e in needles]
-
-
 def get_extension(mimetype):
     """Return ODF extension for given mimetype."""
-
     if mimetype.startswith(odf_prefix):
         _mimetype = mimetype[len(odf_prefix):]
-
         for extension, mimetype in odf_formats.items():
             if mimetype == _mimetype:
                 return extension
-
     return ''
 
 
+# ---------------------------
+# Text file encoding
 
 def get_encoding(filename):
     """Return the current encoding of the given file."""
@@ -501,6 +462,25 @@ def print_unicode(outfile, output, encoding=None, output_encoding=None):
             raise
 
 
+# ---------------------------
+# Data structure navigation
+
+def list_intersect(needles, haystack):
+    """Return a list of all needles which are in haystack list.
+
+    Result is like [e for e in output.keys() if e in ['xml','html']].
+    
+    """
+    return [e for e in haystack if e in needles]
+
+
+# http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/52560
+def unique(seq):
+    """Return a unique list of the sequence elements."""
+    d = {}
+    return [d.setdefault(e,e) for e in seq if e not in d]
+
+
 # http://www-128.ibm.com/developerworks/library/x-tipgenr.html
 def doc_order_iter(node):
     """Iterates over each node in document order, returning each in turn."""
@@ -512,5 +492,48 @@ def doc_order_iter(node):
             yield cn
     return
 
+
+def translate_nodes(innode, tag_map, attr_map):
+    """Converts a DOM tree with one set of tags into another.
+
+    Starting with the root of each tree, recurses through each child
+    of innode, converts tags and attributes according to the given
+    mappings, and returns a tree of the resulting new nodes.
+
+    Returns a node (tree) called outnode.
+
+    """
+    if not innode:
+        return dom.Document().createComment(repr(innode))
+
+    if innode.nodeType == innode.TEXT_NODE:
+        # Copy directly and assume it has no children
+        outnode = dom.Document().createTextNode(innode.data)
+
+    elif innode.nodeType == innode.ELEMENT_NODE: 
+        # Rename tags according to tag_map
+        try:
+            tag = tag_map[innode.localName]
+        except KeyError:
+            tag = "p" # -- is this crazy? by default, handle unexpected nodes as text
+
+        outnode = dom.Document().createElement(tag)
+
+        # Rename attributes according to attr_map
+        for key in attr_map:
+            # NB: this always creates an attribute in outnode
+            try:
+                val = innode.getAttribute(key)
+            except:
+                val = "" 
+            outnode.setAttribute(attr_map[key], val)
+
+        # Translate any children the same way
+        if innode.hasChildNodes():
+            for cnode in innode.childNodes:
+                newnode = translate_nodes(cnode, tag_map, attr_map)
+                outnode.appendChild(newnode)
+
+    return outnode
 
 #EOF

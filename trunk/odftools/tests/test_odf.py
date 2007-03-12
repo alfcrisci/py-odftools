@@ -7,8 +7,6 @@ import odf, document, diff
 class TestCaseText(TestCaseOdfText):
     """A test case for odf text documents."""
 
-    sentence = 'This sentence serves for test purposes.'
-
     def test_load(self):
         self.assertTrue(isinstance(odf.load(self.file), document.Document))
 
@@ -34,19 +32,19 @@ class TestCaseText(TestCaseOdfText):
     def test_text(self):
         doc = odf.load(self.file)
         text = doc.toText()
-        self.assertTrue(self.__class__.sentence in text)
+        self.assertTrue(simple_text in text)
 
     def test_html(self):
         doc = odf.load(self.file)
         html = doc.toHtml()
-        self.assertTrue('<p>' + self.__class__.sentence + '</p>' in html)
+        self.assertTrue(simple_html in html)
 
     def test_replace(self):
         doc = odf.load(self.file)
         s = self._random_string()
-        doc.replace(self.__class__.sentence, s)
+        doc.replace(simple_text, s)
         text = doc.toText()
-        self.assertFalse(self.__class__.sentence in text)
+        self.assertFalse(simple_text in text)
         self.assertTrue(s in text)
 
     def test_odf_to_sqlite(self):
@@ -112,6 +110,230 @@ class TestCaseImages(TestCaseOdfImages):
         self.assertRaises(document.ReCompileError, doc.getEmbeddedObjects, r'*\.png')
         self.assertEqual(len(doc.getEmbeddedObjects(r'10.*D.*\.png')), 1)
 
+
+class TestCaseFormatting(TestCaseOdfText):
+    """A test case for odf documents with tables, lists and formatted text."""
+
+    def test_text(self):
+        doc = odf.load(self.file)
+        text = doc.toText()
+        self.assertTrue(formatted_text in text)
+
+    def test_html(self):
+        doc = odf.load(self.file)
+        html = doc.toHtml()
+        self.assertTrue(formatted_html in html)
+
+
+# ---------------------------
+# Strings for comparison with HTML and plain-text output
+
+simple_text= 'This sentence serves for test purposes.'
+
+simple_html = """<html>
+    <head/>
+    <body class="">
+        <p class="">
+            <p class=""/>
+            <p class="">
+                <p class=""/>
+                <p class=""/>
+
+                <p class=""/>
+                <p class=""/>
+            </p>
+            <p class="">
+                This sentence serves for test purposes.
+            </p>
+        </p>
+    </body>
+</html>"""
+
+
+formatted_text = """Test Sentences
+This document tests basic formatting.
+This line tests bold, italic and underline formatting.
+This paragraph uses a different style (Text body).
+Visit the project homepage at: http://code.google.com/p/py-odftools/
+
+Test List
+Unordered list:
+One
+Two
+Three
+Ordered list:
+First
+Second
+Third
+
+Test Table
+
+R
+r
+R
+RR
+Rr
+r
+Rr
+rr"""
+
+formatted_html = """<html>
+    <head/>
+    <body class="">
+        <p class="">
+            <p class="">
+                <p class=""/>
+                <p class=""/>
+                <p class=""/>
+
+                <p class=""/>
+            </p>
+            <h1 class="">
+                Test Sentences
+            </h1>
+            <p class="">
+                This document tests basic formatting.
+            </p>
+            <p class="">
+                This line tests 
+                <span class="">
+
+                    bold
+                </span>
+                , 
+                <span class="">
+                    italic
+                </span>
+                and 
+                <span class="">
+                    underline
+                </span>
+                formatting.
+            </p>
+
+            <p class="">
+                This paragraph uses a different style (Text body).
+            </p>
+            <p class="">
+                Visit the project homepage at: 
+                <a class="">
+                    http://code.google.com/p/py-odftools/
+                </a>
+            </p>
+            <h1 class="">
+
+                Test List
+            </h1>
+            <p class="">
+                Unordered list:
+            </p>
+            <ol class="">
+                <li class="">
+                    <p class="">
+                        One
+                    </p>
+
+                </li>
+                <li class="">
+                    <p class="">
+                        Two
+                    </p>
+                </li>
+                <li class="">
+                    <p class="">
+                        Three
+                    </p>
+
+                </li>
+            </ol>
+            <p class="">
+                Ordered list:
+            </p>
+            <ol class="">
+                <li class="">
+                    <p class="">
+                        First
+                    </p>
+
+                </li>
+                <li class="">
+                    <p class="">
+                        Second
+                    </p>
+                </li>
+                <li class="">
+                    <p class="">
+                        Third
+                    </p>
+
+                </li>
+            </ol>
+            <p class=""/>
+            <h1 class="">
+                Test Table
+            </h1>
+            <table class="">
+                <p class=""/>
+                <tr class="">
+
+                    <td class="">
+                        <p class=""/>
+                    </td>
+                    <td class="">
+                        <p class="">
+                            R
+                        </p>
+                    </td>
+                    <td class="">
+
+                        <p class="">
+                            r
+                        </p>
+                    </td>
+                </tr>
+                <tr class="">
+                    <td class="">
+                        <p class="">
+                            R
+                        </p>
+
+                    </td>
+                    <td class="">
+                        <p class="">
+                            RR
+                        </p>
+                    </td>
+                    <td class="">
+                        <p class="">
+                            Rr
+                        </p>
+
+                    </td>
+                </tr>
+                <tr class="">
+                    <td class="">
+                        <p class="">
+                            r
+                        </p>
+                    </td>
+                    <td class="">
+
+                        <p class="">
+                            Rr
+                        </p>
+                    </td>
+                    <td class="">
+                        <p class="">
+                            rr
+                        </p>
+                    </td>
+                </tr>
+
+            </table>
+            <p class=""/>
+        </p>
+    </body>
+</html>"""
 
 
 

@@ -46,6 +46,7 @@ class TestCaseOdfTempdir(TestCaseOdftools):
     def tearDown(self):
         shutil.rmtree(self.tempdir)
 
+
 class TestCaseOdfText(TestCaseOdftools):
     """A test case for odftools including a text document."""
 
@@ -54,12 +55,21 @@ class TestCaseOdfText(TestCaseOdftools):
         # os.path.abspath(td + '/../testdata')
         self.file = os.path.abspath(td + '/simple_text.odt')
 
+
 class TestCaseOdfImages(TestCaseOdftools):
     """A test case for odftools including a document with image files."""
 
     def setUp(self):
         super(TestCaseOdftools, self).setUp()
         self.file = os.path.abspath(td + '/simple_graphics.odt')
+
+
+class TestCaseOdfFormats(TestCaseOdftools):
+    """A test case for odftools including a table, lists, and formatted text."""
+
+    def setUp(self):
+        super(TestCaseOdftools, self).setUp()
+        self.file = os.path.abspath(td + '/formatted_text.odt')
 
 
 def test_suite():

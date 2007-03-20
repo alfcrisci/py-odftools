@@ -1,3 +1,14 @@
+#!/usr/bin/env python
+# -*- coding: iso-8859-15 -*-
+#
+# vim: et sts=4 sw=4
+
+"""Declares the filenames and basic operations for the tests in test_odf.py.
+
+Filenames, test classes and other constants are defined here.
+
+"""
+
 import unittest, os, sys, shutil, tempfile
 
 # wd = os.getcwd()

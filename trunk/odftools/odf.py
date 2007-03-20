@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
+#
+# vim: et sts=4 sw=4
 
 
 # These utilities will attempt to cover the lightweight portions of Rob Weir's

@@ -1,3 +1,14 @@
+#!/usr/bin/env python
+# -*- coding: iso-8859-15 -*-
+#
+# vim: et sts=4 sw=4
+
+"""Runs the specific unit tests for this module.
+
+This file uses classes and filenames defined in __init__.py.
+
+"""
+
 import os, tempfile
 
 from tests import TestCaseOdfText, TestCaseOdfImages

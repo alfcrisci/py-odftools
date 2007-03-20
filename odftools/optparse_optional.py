@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
+#
+# vim: et sts=4 sw=4
 
 """This class integrates all patches to optparse.py into an extended version
 needed to provide processing of optional option arguments and option negation.

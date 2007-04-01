@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
-#
-# vim: et sts=4 sw=4
 
-""" The document object, for containing the document in memory
-and to be used as the intermediate step for all operations.
+""" The document class -- object model and associated methods.
+
+Contains the document in memory and is used as the intermediate step for 
+conversions and transformations.
 
 This implementation relies on minidom for handling the object. It may later
-make sense to use the bulkier xml.dom or pyxml, but for now, this
-should do.
+make sense to use the bulkier xml.dom or pyxml, but this seems to be working
+so far.
 
 """
 
@@ -17,48 +17,57 @@ import xml.dom.minidom as dom
 
 
 # Prefix values with "application/vnd.oasis.opendocument." to get MIME types
+
 odf_formats = {'odt':'text', 'ods':'spreadsheet', 'odp':'presentation',
                'odg':'graphics', 'odc':'chart', 'odf':'formula', 'odi':'image',
                'odm':'text-master', 'ott':'text-template',
                'ots':'spreadsheet-template', 'otp':'presentation-template',
                'otg':'graphics-template'}
+
 odf_prefix = "application/vnd.oasis.opendocument."
 
 
+# Exceptions for this module
+
 class ReCompileError(Exception):
-    """Thrown if regular expression is not compilable."""
+    """Thrown if regular expression cannot be compiled."""
     pass
 
 class PathNotFoundError(Exception):
-    """Thrown if a file reference contains a non-existing path."""
+    """Thrown if a file reference contains a nonexistant path."""
     pass
 
+
+# The one true Document Object Model and associated methods
 
 class Document:
     """The ODF document object."""
 
     # Map attribute names to file names
-    files={'mimetype': 'mimetype', 'content': 'content.xml', 'manifest':
-            'META-INF/manifest.xml', 'styles': 'styles.xml', 'settings':
-            'settings.xml', 'meta': 'meta.xml'}
+    file_map = {'mimetype': 'mimetype', 
+                'manifest': 'META-INF/manifest.xml', 
+                'content': 'content.xml', 
+                'styles': 'styles.xml', 
+                'meta': 'meta.xml',
+                'settings': 'settings.xml'}
 
     def __init__(self,
             file='',       # Document file name
             mimetype='',   # Mimetype string
-            content='',    # Content data (the text)
             manifest='',   # Lists the contents of the ODF file
+            content='',    # Content data (the text)
             styles='',     # Formatting data
-            settings='',   # Use is specific to the application
             meta='',       # Metadata
-            additional={}, # additional files (i.e. images)
-            file_dates={}  # file dates for all files and directories
+            settings='',   # Application-specific data
+            additional={}, # Additional bundled files (e.g. images)
+            file_dates={}  # File dates for all files and directories
             ):
 
         # Get all method parameters
         args = locals()
 
         # Process all Document files
-        for key, filename in self.__class__.files.items():
+        for key, filename in self.__class__.file_map.items():
             if key not in args or 0 == len(args[key]):
                 setattr(self, key, '')
             elif not filename or '.xml' != filename[-4:]:
@@ -78,7 +87,7 @@ class Document:
 
     def __del__(self):
         """Unlink each DOM component."""
-        for key in self.__class__.files:
+        for key in self.__class__.file_map:
             attr = getattr(self, key)
             if not isinstance(attr, basestring):
                 attr.unlink()
@@ -89,9 +98,9 @@ class Document:
     def getComponentAsString(self, component_name, pretty_printing=False,
                             encoding=None):
         """Return document component as Unicode string."""
-        if component_name not in self.__class__.files:
+        if component_name not in self.__class__.file_map:
             return ""
-        filename = self.__class__.files[component_name]
+        filename = self.__class__.file_map[component_name]
         attr = getattr(self, component_name)
         if isinstance(attr, basestring):
             return attr
@@ -108,8 +117,8 @@ class Document:
 
         The filter currently supports UNIX glob patterns like "*a[bc]?.png"
         and/or correct regular expressions like ".*a[bc].\.png$".
-        """
 
+        """
         # TODO: support other embedded objects
         search = get_search_for_filter(filter, ignore_case)
         return dict([(filename[9:], content)
@@ -233,7 +242,23 @@ class Document:
 
 
 # ----------------------------------------------------------------------------
-# Global functions for search, navigation,  etc.
+# Global functions 
+
+
+def get_extension(mimetype):
+    """Return ODF extension for given mimetype."""
+    # XXX -- why isn't this part of the Document class?
+    # Would we really want to use this outside the ODF doc context?
+    # If not, merge this into the Document method getExtension
+    if mimetype.startswith(odf_prefix):
+        _mimetype = mimetype[len(odf_prefix):]
+        for extension, mimetype in odf_formats.items():
+            if mimetype == _mimetype:
+                return extension
+    return ''
+
+
+# Search / navigation
 
 def get_search_for_filter(filter, ignore_case=False, limit_glob=True, none_value=True):
     """Return a search function for the given filter.
@@ -289,199 +314,7 @@ def is_glob(filter):
     return not r'\.' in filter and [c for c in '*[]?.' if c in filter]
 
 
-# ---------------------------
-# OS/filesystem navigation
-
-def list_directory(directory, filter=None, ignore_case=False, recursive=False,
-                   must_be_directory=False, include=None, exclude=None):
-    """Scan a directory for ODF files.
-
-    filter may be a relative or absolute directory or filename, a glob and/or
-    a regular expression. After a file was found by the filter, it must match
-    a ODF file extension.
-
-    If recursive is an int, 0 is equivalent to False (no recursion).
-    Any positive int limits the maximum recursion level.
-
-    include and exclude may be a relative or absolute directory or filename, a
-    glob and/or a regular expression.
-    Every file that was found by the filter, must match include and must not
-    match exclude (in this order).
-
-    """
-    directory = get_win_root_directory(directory)
-    if must_be_directory and not os.path.isdir(directory):
-        return []
-
-    _pathsep = os.sep # faster path processing
-    prefix = u''
-    if not directory:
-        directory = '.'
-    else:
-        prefix += directory
-        if prefix[-1] not in "/\\":
-            prefix += _pathsep
-
-    if os.path.isfile(prefix + filter):
-        return [prefix + filter]
-
-    if not os.path.isdir(directory):
-        return []
-
-    search_user = get_search_for_filter(filter, ignore_case)
-    odf_extensions = r".*\.(?:" + "|".join(odf_formats.keys()) + ")$"
-    search_odf = get_search_for_filter(odf_extensions, ignore_case)
-
-    search_include = get_search_for_filter(include, ignore_case, False)
-    search_exclude = get_search_for_filter(exclude, ignore_case, False, False)
-
-    found_files = []
-    root = os.path.abspath(unicode(directory))
-    root_level = root.count(_pathsep)
-    if _pathsep == root[-1]:
-        root_level -= 1
-    for root, dirs, files in os.walk(unicode(directory)):
-        files = [directory == '.' and os.path.join(root, f)[2:] or
-                 os.path.join(root, f) for f in files if search_user(f) and
-                 search_odf(f)]
-        if files:
-            files = [f for f in files if search_include(f) and
-                     not search_exclude(f)]
-            found_files.extend(files)
-
-        level = root.count(_pathsep) - root_level
-        if _pathsep == root[-1]:
-            level -= 1
-
-        if not recursive or \
-           not isinstance(recursive, bool) and level >= recursive:
-            del dirs[:]
-
-    return found_files
-
-
-def get_path_and_filter(directory, test_existence=True):
-    """Return tuple containing the validated path and file filter."""
-    path = ''
-    filter = ''
-
-    _pathsep = os.sep # faster path processing
-    if _pathsep == '\\':
-        directory = directory.replace('/', '\\')
-
-    if len(directory) == 1 and directory == _pathsep:
-        path = _pathsep
-
-    elif test_existence and os.path.isdir(directory):
-        path = directory
-        if path[-1] in r"\/":
-            path = path[:-1]
-    else:
-        import re
-        search_path_separator = re.compile(r'[/\\]')
-        splitted = search_path_separator.split(directory, 1)
-        if directory[0] in r"\/":
-            first_directory = _pathsep
-        else:
-            first_directory = get_win_root_directory(splitted[0])
-
-        # TODO: allow directory globbing "test*/*.odt"
-        if len(splitted) == 2:
-            if test_existence and not os.path.isdir(first_directory):
-                test_regex = directory.replace(r'\.', '.')
-                splitted = search_path_separator.split(test_regex, 1)
-                if len(splitted) == 1:
-                    return ('', directory)
-                raise PathNotFoundError('Path does not exist: ' + first_directory)
-            if first_directory != _pathsep:
-                path += splitted[0]
-            splitted = search_path_separator.split(splitted[1], 1)
-            check_path = path + _pathsep + splitted[0]
-            while len(splitted) == 2:
-                if test_existence and not os.path.isdir(check_path):
-                    raise PathNotFoundError('Path does not exist: ' + check_path)
-                path = check_path
-                splitted = search_path_separator.split(splitted[1], 1)
-                check_path = path + _pathsep + splitted[0]
-            if len(path) == 0 and first_directory == _pathsep:
-                path = _pathsep
-                filter = directory[1 :]
-            else:
-                filter = directory[len(path)+1 :]
-
-        else:
-            filter = directory
-
-    return (path, filter)
-
-
-def get_win_root_directory(directory):
-    """Return windows root directory with path separator, otherwise unchanged."""
-    if len(directory) == 2 and directory[1] == ':':
-        return directory + os.sep
-    return directory
-
-
-def get_extension(mimetype):
-    """Return ODF extension for given mimetype."""
-    if mimetype.startswith(odf_prefix):
-        _mimetype = mimetype[len(odf_prefix):]
-        for extension, mimetype in odf_formats.items():
-            if mimetype == _mimetype:
-                return extension
-    return ''
-
-
-# ---------------------------
-# Text file encoding
-
-def get_encoding(filename):
-    """Return the current encoding of the given file."""
-    # TODO: support sys.stdout
-    encoding = getattr(filename, "encoding", None)
-    if not encoding:
-        encoding = sys.getdefaultencoding()
-    return encoding
-
-
-def print_unicode(outfile, output, encoding=None, output_encoding=None):
-    """Print output to stdout and tries different encodings if necessary."""
-    try:
-        if output_encoding:
-            output = output.decode(output_encoding)
-    except UnicodeError, e:
-        pass
-
-    try:
-        print >>outfile, output
-    except UnicodeError, e:
-        try:
-            # output.encode('latin_1')
-            import codecs
-            outfile = codecs.getwriter(encoding)(outfile)
-            print >>outfile, output
-        except UnicodeError, e:
-            raise
-
-
-# ---------------------------
 # Data structure navigation
-
-def list_intersect(needles, haystack):
-    """Return a list of all needles which are in haystack list.
-
-    Result is like [e for e in output.keys() if e in ['xml','html']].
-    
-    """
-    return [e for e in haystack if e in needles]
-
-
-# http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/52560
-def unique(seq):
-    """Return a unique list of the sequence elements."""
-    d = {}
-    return [d.setdefault(e,e) for e in seq if e not in d]
-
 
 # http://www-128.ibm.com/developerworks/library/x-tipgenr.html
 def doc_order_iter(node):
@@ -538,4 +371,6 @@ def translate_nodes(innode, tag_map, attr_map):
 
     return outnode
 
+
+# vim: et sts=4 sw=4
 #EOF

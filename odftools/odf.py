@@ -1,146 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
-#
-# vim: et sts=4 sw=4
 
+"""odf.py provides a powerful command-line interface for batch scripting.
 
-# These utilities will attempt to cover the lightweight portions of Rob Weir's
-# proposal for an OpenDocument Developer's Kit:
-# http://opendocument.xml.org/node/154
-#
-# The full OASIS OpenDocument specification can be found here:
-# http://www.oasis-open.org/specs/index.php#opendocumentv1.0
-
-
-"""odf.py provides a powerful command line interface for batch scripting.
-
---selftest just executes all unittests and returns.
-By default it writes to stderr, but you can write to file or stdout instead.
---help prints this and returns.
-
-Multiple input files can be passed as directories and/or file filters.
-File filters can be file names, globs and/or regular expressions.
-If a relative or absolute file name is not found, the directory will be
-searched for all ODF files which match the filter.
-So * would find odc, odf, odg, odi, odm, odp, ods, odt, otg, otp, ots, ott.
---recursive searches directories recursively.
-The optional argument LEVEL specifies the maximum recursion level.
-For every file filter the current folder is the start directory.
-
---include FILE: all found files must match the include FILE pattern.
---exclude FILE: all found files must not match the exclude FILE pattern
-(after they have matched the --include FILE pattern).
-
---case-insensitive ignores case for every file name matching, except directory
-parts of file arguments on case-sensitive operating systems like UNIX
-(use --include instead).
-
-One or multiple actions can be done separately to each input file.
-Each different output action results in an output file.
-
-The default output file name is the absolute input file name.
---file changes the default output file name.
---extension-replace changes the output name extension to .txt, .xml, .html or
-the same ODF extension as the input file has.
---extension-append appends .txt, .xml, .html or the same ODF extension as the
-input file has (deactivates --extension-replace).
---directory changes the output path (returns if directory doesn't exist).
---force allows overwriting of existing files!
-
---replace replaces all occurences of a search expression by a replacement
-expression before any other action occurs.
-Only text nodes of content.xml will be affected.
-
---tohtml converts the input file to a HTML representation.
---totext converts the input file content.xml to a plain-text representation.
---toxml outputs the input file content.xml.
-
---toodf outputs the input file even if no data was changed.
-Even if --toodf is not given, ODF output will be written if no conversion
-was done but data was changed.
-No non-ODF data will be written to input file names, even if --force.
-The corresponding warning will not be print if --stdout is given and --file
-is not given.
-
-All conversion options take an optional argument for writing to a different
-output file. It will be preferred over the --file option and disregards the
---extension-* options.
-
---stdin reads the contents of one input file from stdin prior to processing any
-other input files (if data is available). Default output file name is "stdin".
-
---stdout prints any output except ODF data to the console in addition to
-eventually writing output files.
-
---quiet suppresses all output to stdout.
---verbose provides more informational output.
-
---list-authors outputs a list of authors for all input files.
-The optional argument FILE specifies the output file name.
-
-
-The preferred order is to pass the file pattern arguments first, then options:
-python odf.py dir/a*.ods --list-authors authors.txt --toxml --extension-append
-
-Especially (optional) option arguments have to follow their options directly:
-python odf.py /*.od[ts] --replace s([e])arch r\\1place
-python odf.py a.odt --tohtml dir/output.html dir/search*.odg
-
-
-Examples:
----------
-
-# Replace text in documents, convert them to text and print the result.
-python odf.py /* --replace s r --totext --stdout
-
-# Replace text, convert to HTML and save with appended .html extension.
-python odf.py / --replace s r --tohtml --extension-append
-
-# Search recursively, replace text and overwrite only changed input files.
-python odf.py * --replace s r --recursive --force
-
-# Search recursively, replace text and overwrite all input files.
-python odf.py . --replace s r --recursive --force --toodf
-
-# Search recursively (maximum 2 levels), print authors to stdout and file.
-python odf.py /a* /b/c* --recursive 2 --list-authors authors.txt --stdout
-
-# Search multiple directories recursively, filtering by include and exclude
-python odf.py /dir1 /dir2/dir3 --recursive 2 --include job --exclude work -v
-
-# Convert document to HTML and text and save with different file names.
-python odf.py a.odt --tohtml b.htm --totext c.log --file=for_unspecified_opts
-
-
-Attention:
-----------
-
---extension-replace could lead to an output filename of an input file.
-
---toodf or changed ODF data and no conversions result in ODF output.
-
-Examples:
-
-# Write new ODF files even when no data was changed.
-python odf.py * --replace s r --toodf --extension-append
-
-# Overwrite input file if data was changed.
-python odf.py a.odt --force --replace s r
-
-# Do not overwrite input file EVEN if data was changed! A warning message
-# will be printed that writing text to input file is not permitted.
-python odf.py a.odt --force --replace s r --totext
-
-# Print to stdout but suppress text-to-ODF warning even if data was changed.
-python odf.py a.odt --force --replace s r --totext --stdout
-
-# But: write to input file even if data was not changed.
-python odf.py a.odt --force --replace s r --totext --stdout --toodf
+For more information on using odf.py from the command line, see readme.txt.
 
 """
 
 import os
-
 from document import *
 
 
@@ -155,10 +22,11 @@ class ReadError(Exception):
 
 # -----------------------------------------------------------------------------
 # Provide a Pickle-like interface for reading and writing.
+
 def load(src):
     """Return a Document representing the contents of the ODF file src."""
-
     import zipfile
+
     try:
         zf = zipfile.ZipFile(src, 'r')
     except IOError, e:
@@ -170,7 +38,7 @@ def load(src):
     obj_dict["file_dates"] = {}
     if isinstance(src, basestring) and len(src) < 1000 and os.path.isfile(src):
         obj_dict["file"] = src
-    inverted = dict([(v,k) for k,v in Document.files.items()])
+    inverted = dict([(v,k) for k,v in Document.file_map.items()])
     file_dates = {}
 
     for filename in names:
@@ -190,16 +58,17 @@ def dump(doc, dst):
     """Write the ODF content of doc to a Zip file named dst.
 
     The output file is a full ODF file and readable by load() and OOo.
+    
     """
-
     import zipfile
+
     try:
       zf = zipfile.ZipFile(dst, 'w')
     except IOError, e:
       raise WriteError(e)
 
     # Zip document attributes
-    for key, filename in Document.files.items():
+    for key, filename in Document.file_map.items():
         if filename:
             zipinfo = zipfile.ZipInfo(filename, doc.file_dates[filename])
             content = doc.getComponentAsString(key, encoding='utf-8')
@@ -219,8 +88,8 @@ def dump(doc, dst):
 
 def loads(str):
     """Return a Document representing the ODF file contents in binary str."""
-
     from cStringIO import StringIO
+
     src = StringIO(str)
     obj = load(src)
     src.close()
@@ -229,8 +98,8 @@ def loads(str):
 
 def dumps(doc):
     """Return a binary string containing the ODF content of doc (Zip file)."""
-
     from cStringIO import StringIO
+
     dst = StringIO()
     dump(doc, dst)
     str = dst.getvalue()
@@ -253,7 +122,6 @@ def OdfToHtml(filename, title=''):
 
 def OdfToSqlite(filename):
     """Return SQLite binary string of the zipped OpenDocument file."""
-
     try:
         from sqlite3 import dbapi2 as sqlite    # Python25
     except ImportError:
@@ -263,6 +131,7 @@ def OdfToSqlite(filename):
         f = open(filename,'rb')
     except IOError, e:
         raise ReadError(e)
+
     doc = f.read()
     f.close()
     return sqlite.Binary(doc)
@@ -272,8 +141,8 @@ def SqlToOdf(blob, filename=None):
     """Save binary string blob containing a zipped OpenDocument into filename.
 
     Return a corresponding Document if filename is None.
-    """
 
+    """
     if filename is None:
         return loads(blob)
 
@@ -281,16 +150,201 @@ def SqlToOdf(blob, filename=None):
         f = open(filename,'wb')
     except IOError, e:
         raise WriteError(e)
+
     f.write(blob)
     f.close()
 
+# -----------------------------------------------------------------------------
+# Path navigation
+#
+# These are useful on Windows where the command shell is weak.
+
+def list_directory(directory, filter=None, ignore_case=False, recursive=False,
+                   must_be_directory=False, include=None, exclude=None):
+    """Scan a directory for ODF files.
+
+    filter may be a relative or absolute directory or filename, a glob and/or
+    a regular expression. After a file was found by the filter, it must match
+    a ODF file extension.
+
+    If recursive is an int, 0 is equivalent to False (no recursion).
+    Any positive int limits the maximum recursion level.
+
+    include and exclude may be a relative or absolute directory or filename, a
+    glob and/or a regular expression.
+    Every file that was found by the filter, must match include and must not
+    match exclude (in this order).
+
+    """
+    directory = get_win_root_directory(directory)
+    if must_be_directory and not os.path.isdir(directory):
+        return []
+
+    _pathsep = os.sep # faster path processing
+    prefix = u''
+    if not directory:
+        directory = '.'
+    else:
+        prefix += directory
+        if prefix[-1] not in "/\\":
+            prefix += _pathsep
+
+    if os.path.isfile(prefix + filter):
+        return [prefix + filter]
+
+    if not os.path.isdir(directory):
+        return []
+
+    search_user = get_search_for_filter(filter, ignore_case)
+    odf_extensions = r".*\.(?:" + "|".join(odf_formats.keys()) + ")$"
+    search_odf = get_search_for_filter(odf_extensions, ignore_case)
+
+    search_include = get_search_for_filter(include, ignore_case, False)
+    search_exclude = get_search_for_filter(exclude, ignore_case, False, False)
+
+    found_files = []
+    root = os.path.abspath(unicode(directory))
+    root_level = root.count(_pathsep)
+    if _pathsep == root[-1]:
+        root_level -= 1
+    for root, dirs, files in os.walk(unicode(directory)):
+        files = [directory == '.' and os.path.join(root, f)[2:] or
+                 os.path.join(root, f) for f in files if search_user(f) and
+                 search_odf(f)]
+        if files:
+            files = [f for f in files if search_include(f) and
+                     not search_exclude(f)]
+            found_files.extend(files)
+
+        level = root.count(_pathsep) - root_level
+        if _pathsep == root[-1]:
+            level -= 1
+
+        if not recursive or \
+           not isinstance(recursive, bool) and level >= recursive:
+            del dirs[:]
+
+    return found_files
+
+
+def get_path_and_filter(directory, test_existence=True):
+    """Return tuple containing the validated path and file filter."""
+    path = ''
+    filter = ''
+
+    _pathsep = os.sep # faster path processing
+    if _pathsep == '\\':
+        directory = directory.replace('/', '\\')
+
+    if len(directory) == 1 and directory == _pathsep:
+        path = _pathsep
+
+    elif test_existence and os.path.isdir(directory):
+        path = directory
+        if path[-1] in r"\/":
+            path = path[:-1]
+    else:
+        import re
+        search_path_separator = re.compile(r'[/\\]')
+        splitted = search_path_separator.split(directory, 1)
+        if directory[0] in r"\/":
+            first_directory = _pathsep
+        else:
+            first_directory = get_win_root_directory(splitted[0])
+
+        # TODO: allow directory globbing "test*/*.odt"
+        if len(splitted) == 2:
+            if test_existence and not os.path.isdir(first_directory):
+                test_regex = directory.replace(r'\.', '.')
+                splitted = search_path_separator.split(test_regex, 1)
+                if len(splitted) == 1:
+                    return ('', directory)
+                raise PathNotFoundError('Path does not exist: ' + first_directory)
+            if first_directory != _pathsep:
+                path += splitted[0]
+            splitted = search_path_separator.split(splitted[1], 1)
+            check_path = path + _pathsep + splitted[0]
+            while len(splitted) == 2:
+                if test_existence and not os.path.isdir(check_path):
+                    raise PathNotFoundError('Path does not exist: ' + check_path)
+                path = check_path
+                splitted = search_path_separator.split(splitted[1], 1)
+                check_path = path + _pathsep + splitted[0]
+            if len(path) == 0 and first_directory == _pathsep:
+                path = _pathsep
+                filter = directory[1 :]
+            else:
+                filter = directory[len(path)+1 :]
+
+        else:
+            filter = directory
+
+    return (path, filter)
+
+
+def get_win_root_directory(directory):
+    """Return windows root directory with path separator, otherwise unchanged."""
+    if len(directory) == 2 and directory[1] == ':':
+        return directory + os.sep
+    return directory
+
+
+# -----------------------------------------------------------------------------
+# Text file encoding
+
+def get_encoding(filename):
+    """Return the current encoding of the given file."""
+    # TODO: support sys.stdout
+    encoding = getattr(filename, "encoding", None)
+    if not encoding:
+        encoding = sys.getdefaultencoding()
+    return encoding
+
+
+def print_unicode(outfile, output, encoding=None, output_encoding=None):
+    """Print output to stdout and tries different encodings if necessary."""
+    try:
+        if output_encoding:
+            output = output.decode(output_encoding)
+    except UnicodeError, e:
+        pass
+
+    try:
+        print >>outfile, output
+    except UnicodeError, e:
+        try:
+            # output.encode('latin_1')
+            import codecs
+            outfile = codecs.getwriter(encoding)(outfile)
+            print >>outfile, output
+        except UnicodeError, e:
+            raise
+
+
+# -----------------------------------------------------------------------------
+# Data structure handling
+
+def list_intersect(needles, haystack):
+    """Return a list of all needles which are in haystack list.
+
+    Result is like [e for e in output.keys() if e in ['xml','html']].
+    
+    """
+    return [e for e in haystack if e in needles]
+
+
+# http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/52560
+def unique(seq):
+    """Return a unique list of the sequence elements."""
+    d = {}
+    return [d.setdefault(e,e) for e in seq if e not in d]
 
 
 # -----------------------------------------------------------------------------
 # Commmand line processing
 
-def process_command_line():
-  """Handle command-line arguments."""
+def main():
+  """Handle command-line arguments and options."""
 
   # as long as optional option values and negation are not implemented
   from optparse_optional import OptionalOptionParser
@@ -625,8 +679,8 @@ def process_command_line():
 
       elif not options.stdout:
         if verbosity >= 1:
-          print >>sys.stderr, 'No way to output list of authors (pass --file',
-          print >>sys.stderr, 'or --stdout)'
+          print >>sys.stderr, 'No way to output list of authors ' \
+                  '(pass --file or --stdout)'
 
       else:
         print_unicode(sys.stdout, output, encoding)
@@ -634,8 +688,8 @@ def process_command_line():
   except UnicodeError, e:
     if isinstance(e.object, unicode):
       import unicodedata
-      print >>sys.stderr, e, ' -> character name: "',
-      print >>sys.stderr, unicodedata.name(e.object[e.start]), '"'
+      print >>sys.stderr, e, ' -> character name: "%s"' % \
+              unicodedata.name(e.object[e.start])
     else:
       print >>sys.stderr, e, ' -> character: "', e.object[e.start], '"'
     raise
@@ -648,7 +702,8 @@ def process_command_line():
 
 
 if __name__ == "__main__":
-    process_command_line()
+    main()
 
 
+# vim: et sts=4 sw=4
 #EOF

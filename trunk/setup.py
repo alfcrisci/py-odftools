@@ -20,7 +20,7 @@ setup(  name='odftools',
         description='OpenDocument library for Python',
         packages=['odftools'],
         package_data={'odftools': ['README.txt']},
-        scripts=['odftools/odf'],
+        #scripts=['odftools/odf.py'],
         download_url='http://code.google.com/p/python/py-odftools/',
         classifiers=[
             'Development Status :: 0 - Nada',

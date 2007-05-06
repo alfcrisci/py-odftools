@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
 
 """ The document class -- object model and associated methods.
@@ -6,14 +5,18 @@
 Contains the document in memory and is used as the intermediate step for 
 conversions and transformations.
 
-This implementation relies on minidom for handling the object. It may later
-make sense to use the bulkier xml.dom or pyxml, but this seems to be working
-so far.
+This implementation uses the ElementTree module to create and navigate the
+object. This is built into Python 2.5 and available separately as a standalone
+module.
 
 """
 
 import os, sys
-import xml.dom.minidom as dom
+
+try:
+    import xml.etree.cElementTree as ET
+except ImportError:
+    from elementtree.cElementTree import ElementTree as ET
 
 
 # Prefix values with "application/vnd.oasis.opendocument." to get MIME types
@@ -38,11 +41,10 @@ class PathNotFoundError(Exception):
     pass
 
 
-# The one true Document Object Model and associated methods
+# The Document tree and associated methods
 
 class Document:
     """The ODF document object."""
-
     # Map attribute names to file names
     file_map = {'mimetype': 'mimetype', 
                 'manifest': 'META-INF/manifest.xml', 
@@ -74,7 +76,8 @@ class Document:
                 setattr(self, key, args[key])
             else:
                 try:
-                    setattr(self, key, dom.parseString(args[key]))
+                    # Parse the XML string and set it as an ElementTree object
+                    setattr(self, key, ET.XML(args[key])) 
                 except Exception, e:
                     print >>sys.stderr, sysargs[key]
                     print >>sys.stderr, e
@@ -85,17 +88,21 @@ class Document:
         if not hasattr(self, 'file'):
             self.file = None
 
-    def __del__(self):
-        """Unlink each DOM component."""
+    def __del__(self): # XXX is this still necessary?
+        """Clean up.
+        
+        This was originally here to unlink each DOM component.
+        
+        """
         for key in self.__class__.file_map:
             attr = getattr(self, key)
             if not isinstance(attr, basestring):
-                attr.unlink()
+                del attr
 
     # ---------------------------
     # Extract objects from the document
 
-    def getComponentAsString(self, component_name, pretty_printing=False,
+    def getComponentAsString(self, component_name, #pretty_printing=False,
                             encoding=None):
         """Return document component as Unicode string."""
         if component_name not in self.__class__.file_map:
@@ -104,9 +111,9 @@ class Document:
         attr = getattr(self, component_name)
         if isinstance(attr, basestring):
             return attr
-        if pretty_printing:
-            return attr.toprettyxml(encoding)
-        return attr.toxml(encoding)
+        #if pretty_printing:
+        #    return attr.toprettyxml(encoding)
+        return ET.tostring(attr, encoding=encoding)
 
     def getEmbeddedObjects(self, filter=None, ignore_case=False):
         """Return a dictionary of the objects embedded in the document.
@@ -160,14 +167,15 @@ class Document:
 
     def toText(self, skip_blank_lines=True):
         """Return the content of the document as a plain-text Unicode string."""
-        textlist = [node.data for node in doc_order_iter(self.content)
-                    if node.nodeType == node.TEXT_NODE
-                    and (not skip_blank_lines or 0 != len(node.data.strip()))]
+        textlist = (node.text for node in self.content.getiterator()
+                    if not skip_blank_lines or node.text)
         return unicode(os.linesep).join(textlist)
 
     def toHtml(self, title="", encoding="utf-8"):
         """Return an UTF-8 encoded HTML representation of the document."""
         # TODO: 
+        # First, convert to ET operations
+        # Then,
         # - Scrape up meta tags and add to headnode
         #     '<meta http-equiv="content-type" content="text/html; charset=UTF-8">'
         #     '<meta type="Generator" content="python-odftools" />'
@@ -195,45 +203,49 @@ class Document:
                 "list": "ol",
                 "list-item": "li" }
 
-        htmldoc = dom.parseString('<html />')
-        headnode = htmldoc.firstChild.appendChild(htmldoc.createElement("head"))
-        # TODO: add nodes to the head as needed
+        htmldoc = ET.Element("html")
+        headnode = ET.SubElement(htmldoc, "head")
+        titlenode = ET.SubElement(headnode, "title")
+        titlenode.text = title
+        # ENH: add meta etc. nodes to the head as needed
 
-        docbody = self.content.getElementsByTagName("office:body")
-        if docbody.length:
-            bodynode = translate_nodes(docbody.item(0), tags_odf2html, attrs_odf2html)
+        docbody = self.content.find("office:body")
+        if docbody:
+            bodynode = translate_nodes(docbody, tags_odf2html, attrs_odf2html)
         else:
-            bodynode = htmldoc.createElement("body")
-        htmldoc.firstChild.appendChild(bodynode)
+            bodynode = ET.SubElement(htmldoc, "body")
 
-        htmldoc.normalize() # Is this how normalize is used? Do on every level?
-        htmlstr = htmldoc.toprettyxml(indent="    ", encoding=encoding).split("\n", 1)[1]
         doctypestr = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">\n'
-        return "%s\n%s" % (doctypestr, htmlstr)
+        htmlstr = ET.tostring(htmldoc, encoding=encoding) # .split("\n", 1)[1] # XXX kill 1st line?
+        return "\n".join((doctypestr, htmlstr))
 
     def replace(self, search, replace):
         """Replace all occurences of search in content by replace.
 
         Regular expressions are fully supported for search and replace.
 
+        Returns the number of replacements made.
+
         """
         if not search:
             return 0
+
         import re, sre_constants
+
         try:
             _replace = re.compile(search).sub
             search = lambda x, y: find(x, y)
-
         except (sre_constants.error, TypeError), v:
             print >>sys.stderr, 'Warning: could not compile regular expression:', v
             return 0
+
         count = 0
-        for node in doc_order_iter(self.content):
-            if node.nodeType == node.TEXT_NODE and node.data:
+        for node in self.content.getiterator():
+            if node.text:
                 try:
-                    replaced = _replace(replace, node.data)
-                    if replaced != node.data:
-                        node.data = replaced
+                    replaced = _replace(replace, node.text)
+                    if replaced != node.text:
+                        node.text = replaced
                         count += 1
                 except (sre_constants.error, TypeError), v:
                     print >>sys.stderr, 'Warning: could not compile regular expression:', v
@@ -329,7 +341,7 @@ def doc_order_iter(node):
 
 
 def translate_nodes(innode, tag_map, attr_map):
-    """Converts a DOM tree with one set of tags into another.
+    """Converts an ElementTree with one set of tags into another.
 
     Starting with the root of each tree, recurses through each child
     of innode, converts tags and attributes according to the given
@@ -338,36 +350,36 @@ def translate_nodes(innode, tag_map, attr_map):
     Returns a node (tree) called outnode.
 
     """
-    if not innode:
-        return dom.Document().createComment(repr(innode))
+ 
+    # Validate innode lil bit
+    try:
+        if innode.tag is ET.Comment:
+            return innode
+        elif innode.tag is ET.ProcessingInstruction:
+            # Not sure how to the handle this, so skip it
+            pass
+    except AttributeError:
+        # Assume innode was garbage. Return it as a comment and keep going.
+        return ET.Comment(str(innode))
 
-    if innode.nodeType == innode.TEXT_NODE:
-        # Copy directly and assume it has no children
-        outnode = dom.Document().createTextNode(innode.data)
+    # Rename tags according to tag_map
+    try:
+        tag = tag_map[innode.tag]
+    except KeyError:
+        tag = "p" # By default, handle unexpected nodes as text -- is this crazy?
 
-    elif innode.nodeType == innode.ELEMENT_NODE: 
-        # Rename tags according to tag_map
-        try:
-            tag = tag_map[innode.localName]
-        except KeyError:
-            tag = "p" # -- is this crazy? by default, handle unexpected nodes as text
+    outnode = ET.Element(tag)
 
-        outnode = dom.Document().createElement(tag)
+    # Rename attributes according to attr_map
+    for attr in innode.attrib:
+        outnode.set(attr_map[attr], innode.get(attr))
 
-        # Rename attributes according to attr_map
-        for key in attr_map:
-            # NB: this always creates an attribute in outnode
-            try:
-                val = innode.getAttribute(key)
-            except:
-                val = "" 
-            outnode.setAttribute(attr_map[key], val)
+    # Translate any children the same way
+    if len(innode):
+        for cnode in list(innode):
+            newnode = translate_nodes(cnode, tag_map, attr_map)
+            outnode.append(newnode)
 
-        # Translate any children the same way
-        if innode.hasChildNodes():
-            for cnode in innode.childNodes:
-                newnode = translate_nodes(cnode, tag_map, attr_map)
-                outnode.appendChild(newnode)
 
     return outnode
 

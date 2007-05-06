@@ -1,16 +1,31 @@
 #!/usr/bin/env python
+#! -*- coding: iso-8859-15 -*-
 
-# XXX: What's the deal with eggs? is that a 2.5 thing?
+"""Standard script for generating installers for various platforms.
+
+To generate the default built distribution for your platform, run this command:
+
+    python setup.py bdist
+
+This creates a tarball on Unix systems (including cygwin) and a simple
+executable installer on Windows.
+
+See also:
+http://www.python.org/doc/current/dist/built-dist.html
+
+"""
+
+# TODO: Create an egg if setuptools is available, else fall back to this
 
 from distutils.core import setup
 import sys 
 
-# patch distutils if it can't cope with the "classifiers" or
-# "download_url" keywords
+# Patch distutils if it can't handle "classifiers" or "download_url" keywords
 if sys.version < '2.2.3':
     from distutils.dist import DistributionMetadata
     DistributionMetadata.classifiers = None
     DistributionMetadata.download_url = None
+
 
 setup(  name='odftools',
         version='0.1.0',
@@ -34,6 +49,5 @@ setup(  name='odftools',
             'Programming Language :: Python',
             'Topic :: Office/Business',
             'Topic :: Software Development',
-            ],
-        )
+            ])
 

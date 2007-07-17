@@ -3,6 +3,8 @@
 """Contents of the document: text and data."""
 
 import os, sys
+import re
+import sre_constants
 
 try:
     import xml.etree.cElementTree as ET
@@ -53,8 +55,6 @@ class Content(object):
         """
         if not search:
             return 0
-
-        import re, sre_constants
 
         try:
             _replace = re.compile(search).sub

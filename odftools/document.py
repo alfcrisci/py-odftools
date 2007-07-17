@@ -12,11 +12,12 @@ module.
 """
 
 import os, sys
+# try:
+#     import xml.etree.cElementTree as ET
+# except ImportError:
+#     from elementtree.cElementTree import ElementTree as ET
 
-try:
-    import xml.etree.cElementTree as ET
-except ImportError:
-    from elementtree.cElementTree import ElementTree as ET
+from components import content, manifest, meta, settings, styles
 
 
 # Prefix values with "application/vnd.oasis.opendocument." to get MIME types
@@ -69,6 +70,7 @@ class Document(object):
         args = locals()
 
         # Process all Document files
+        # TODO: pass xml strings to component constructors
         for key, filename in self.__class__.file_map.items():
             if key not in args or 0 == len(args[key]):
                 setattr(self, key, '')
@@ -99,28 +101,14 @@ class Document(object):
             if not isinstance(attr, basestring):
                 del attr
 
-    # ---------------------------
-    # Extract objects from the document
+    # Get non-XML components from the document
 
-    def getComponentAsString(self, component_name, #pretty_printing=False,
-                            encoding=None):
-        """Return document component as Unicode string."""
-        if component_name not in self.__class__.file_map:
-            return ""
-        filename = self.__class__.file_map[component_name]
-        attr = getattr(self, component_name)
-        if isinstance(attr, basestring):
-            return attr
-        #if pretty_printing:
-        #    return attr.toprettyxml(encoding)
-        return ET.tostring(attr, encoding=encoding)
-
-    def getEmbeddedObjects(self, filter=None, ignore_case=False):
+    def get_embedded(self, filter=None, ignore_case=False):
         """Return a dictionary of the objects embedded in the document.
 
-        A more general form of getImages. By default, this should return
-        all embedded objects; the list/dictionary can also be filtered
-        for a certain type, e.g. image files.
+        By default, this should return all embedded objects; the
+        list/dictionary can also be filtered for a certain type, e.g. image
+        files.
 
         The filter currently supports UNIX glob patterns like "*a[bc]?.png"
         and/or correct regular expressions like ".*a[bc].\.png$".
@@ -133,45 +121,21 @@ class Document(object):
                     if 'Pictures/' == filename[:9]
                     and search(filename[9:])])
 
-    def getElementsByType(self, elementtype):
-        """Extract all elements of a given type from the document.
-
-        For example, formulas or code.
-
-        """
-        pass
-
-    def getAuthor(self):
-        """Return the author of this document if available."""
-        author = ''
-        if self.meta:
-            for node in self.meta.getElementsByTagName("dc:creator"):
-                if (node.firstChild.nodeType == node.TEXT_NODE) and node.firstChild.data:
-                    author = node.firstChild.data
-                    break
-
-        return author
-
-    def getExtension(self):
+    def get_extension(self):
         """Return ODF extension for given mimetype."""
         return get_extension(self.mimetype)
 
-    # ---------------------------
     # Convert the document to other formats
 
-    def toXml(self, pretty_printing=False, encoding=None):
-        """Return the content of the document as a XML Unicode string."""
-        if pretty_printing:
-            return self.content.toprettyxml(encoding)
-        return self.content.toxml(encoding)
+    def to_text(self, skip_blank_lines=True):
+        """Return the content of the document as a plain-text Unicode string.
+        
+        Included here as well as in self.content to resemble to_html's usage.
+        
+        """
+        return self.content.to_text()
 
-    def toText(self, skip_blank_lines=True):
-        """Return the content of the document as a plain-text Unicode string."""
-        textlist = (node.text for node in self.content.getiterator()
-                    if not skip_blank_lines or node.text)
-        return unicode(os.linesep).join(textlist)
-
-    def toHtml(self, title="", encoding="utf-8"):
+    def to_html(self, title="", encoding="utf-8"):
         """Return an UTF-8 encoded HTML representation of the document."""
         # TODO: 
         # First, convert to ET operations
@@ -218,39 +182,6 @@ class Document(object):
         doctypestr = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">\n'
         htmlstr = ET.tostring(htmldoc, encoding=encoding) # .split("\n", 1)[1] # XXX kill 1st line?
         return "\n".join((doctypestr, htmlstr))
-
-    def replace(self, search, replace):
-        """Replace all occurences of search in content by replace.
-
-        Regular expressions are fully supported for search and replace.
-
-        Returns the number of replacements made.
-
-        """
-        if not search:
-            return 0
-
-        import re, sre_constants
-
-        try:
-            _replace = re.compile(search).sub
-            search = lambda x, y: find(x, y)
-        except (sre_constants.error, TypeError), v:
-            print >>sys.stderr, 'Warning: could not compile regular expression:', v
-            return 0
-
-        count = 0
-        for node in self.content.getiterator():
-            if node.text:
-                try:
-                    replaced = _replace(replace, node.text)
-                    if replaced != node.text:
-                        node.text = replaced
-                        count += 1
-                except (sre_constants.error, TypeError), v:
-                    print >>sys.stderr, 'Warning: could not compile regular expression:', v
-                    return 0
-        return count
 
 
 

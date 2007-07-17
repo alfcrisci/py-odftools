@@ -1,15 +1,6 @@
 # -*- coding: iso-8859-15 -*-
 
-""" The document class -- object model and associated methods.
-
-Contains the document in memory and is used as the intermediate step for 
-conversions and transformations.
-
-This implementation uses the ElementTree module to create and navigate the
-object. This is built into Python 2.5 and available separately as a standalone
-module.
-
-"""
+"""Application-specific settings for the document."""
 
 import os, sys
 
@@ -40,10 +31,18 @@ class PathNotFoundError(Exception):
     """Thrown if a file reference contains a nonexistant path."""
     pass
 
+# Main class
+
+class Settings(object):
+
+    def __init__(self, text):
+        self.root = ET.fromstring(text)
+
+
 
 # The Document tree and associated methods
 
-class Document(object):
+class Document:
     """The ODF document object."""
     # Map attribute names to file names
     file_map = {'mimetype': 'mimetype', 
@@ -252,138 +251,3 @@ class Document(object):
                     return 0
         return count
 
-
-
-# ----------------------------------------------------------------------------
-# Global functions 
-
-
-def get_extension(mimetype):
-    """Return ODF extension for given mimetype."""
-    # XXX -- why isn't this part of the Document class?
-    # Would we really want to use this outside the ODF doc context?
-    # If not, merge this into the Document method getExtension
-    if mimetype.startswith(odf_prefix):
-        _mimetype = mimetype[len(odf_prefix):]
-        for extension, mimetype in odf_formats.items():
-            if mimetype == _mimetype:
-                return extension
-    return ''
-
-
-# Search / navigation
-
-def get_search_for_filter(filter, ignore_case=False, limit_glob=True, none_value=True):
-    """Return a search function for the given filter.
-
-    Any filter not containing an escaped dot ("\.") and containing at least one
-    "*", "?" or "." will be interpreted as glob.
-    But in addition all globs still may contain all other regular expression
-    sequences like [\d_-] or (home|job).
-
-    Please note that you have to use " as a string separator on Windows command
-    line. In addition, some regular expressions containing characters like the
-    pipe symbol "|" must be enclosed by string separators.
-
-    limit_glob adds ^ and $ modifiers to globs (default).
-    none_value specifies the return value if filter is empty.
-
-    """
-    if filter:
-        import re, sre_constants
-        try:
-            # filter = re.escape(filter)
-            if os.sep == '\\':
-                filter = filter.replace('/', '\\\\')
-
-            if filter[-1] == '\\' and (len(filter) == 1 or filter[-2] != '\\'):
-                filter += '\\'
-
-            if is_glob(filter):
-                s = filter.replace('.', r'\.').replace('*', '.*').replace('?', '.')
-                if limit_glob and filter[0] != '*':
-                    s = '^' + s
-                if limit_glob and filter[-1] != '*':
-                    s += '$'
-
-                filter = s
-            if ignore_case:
-                find = re.compile(filter, re.IGNORECASE).search
-            else:
-                find = re.compile(filter).search
-            search = lambda x: find(x)
-        except (sre_constants.error, TypeError), v:
-            # print >>sys.stderr, 'Warning: could not compile regular expression:', v
-            # search = lambda x: False
-            raise ReCompileError(v)
-    else:
-        search = lambda x: none_value
-
-    return search
-
-
-def is_glob(filter):
-    """Return True if filter contains a glob expression, False otherwise."""
-    return not r'\.' in filter and [c for c in '*[]?.' if c in filter]
-
-
-# Data structure navigation
-
-# http://www-128.ibm.com/developerworks/library/x-tipgenr.html
-def doc_order_iter(node):
-    """Iterates over each node in document order, returning each in turn."""
-    # Document order returns the current node, then each of its children in turn
-    yield node
-    for child in node.childNodes:
-        # Create a generator for each child, over which to iterate
-        for cn in doc_order_iter(child):
-            yield cn
-    return
-
-
-def translate_nodes(innode, tag_map, attr_map):
-    """Converts an ElementTree with one set of tags into another.
-
-    Starting with the root of each tree, recurses through each child
-    of innode, converts tags and attributes according to the given
-    mappings, and returns a tree of the resulting new nodes.
-
-    Returns a node (tree) called outnode.
-
-    """
- 
-    # Validate innode lil bit
-    try:
-        if innode.tag is ET.Comment:
-            return innode
-        elif innode.tag is ET.ProcessingInstruction:
-            # Not sure how to the handle this, so skip it
-            pass
-    except AttributeError:
-        # Assume innode was garbage. Return it as a comment and keep going.
-        return ET.Comment(str(innode))
-
-    # Rename tags according to tag_map
-    try:
-        tag = tag_map[innode.tag]
-    except KeyError:
-        tag = "p" # By default, handle unexpected nodes as text -- is this crazy?
-
-    outnode = ET.Element(tag)
-
-    # Rename attributes according to attr_map
-    for attr in innode.attrib:
-        outnode.set(attr_map[attr], innode.get(attr))
-
-    # Translate any children the same way
-    if len(innode):
-        for cnode in list(innode):
-            newnode = translate_nodes(cnode, tag_map, attr_map)
-            outnode.append(newnode)
-
-
-    return outnode
-
-
-# vim: et sts=4 sw=4
-#EOF

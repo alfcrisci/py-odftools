@@ -1,194 +1,29 @@
 # -*- coding: iso-8859-15 -*-
 
-""" The document class -- object model and associated methods.
-
-Contains the document in memory and is used as the intermediate step for 
-conversions and transformations.
-
-This implementation uses the ElementTree module to create and navigate the
-object. This is built into Python 2.5 and available separately as a standalone
-module.
-
-"""
-
 import os, sys
-# try:
-#     import xml.etree.cElementTree as ET
-# except ImportError:
-#     from elementtree.cElementTree import ElementTree as ET
 
-from components import content, manifest, meta, settings, styles
+try:
+    import xml.etree.cElementTree as ET
+except ImportError:
+    from elementtree.cElementTree import ElementTree as ET
+
+from components.content import Content
+from components.manifest import Manifest
+from components.meta import Meta
+from components.settings import Settings
+from components.styles import Styles
 
 
 # Prefix values with "application/vnd.oasis.opendocument." to get MIME types
-
+odf_prefix = "application/vnd.oasis.opendocument."
 odf_formats = {'odt':'text', 'ods':'spreadsheet', 'odp':'presentation',
                'odg':'graphics', 'odc':'chart', 'odf':'formula', 'odi':'image',
                'odm':'text-master', 'ott':'text-template',
                'ots':'spreadsheet-template', 'otp':'presentation-template',
                'otg':'graphics-template'}
 
-odf_prefix = "application/vnd.oasis.opendocument."
 
-
-# Exceptions for this module
-
-class ReCompileError(Exception):
-    """Thrown if regular expression cannot be compiled."""
-    pass
-
-class PathNotFoundError(Exception):
-    """Thrown if a file reference contains a nonexistant path."""
-    pass
-
-
-# The Document tree and associated methods
-
-class Document(object):
-    """The ODF document object."""
-    # Map attribute names to file names
-    file_map = {'mimetype': 'mimetype', 
-                'manifest': 'META-INF/manifest.xml', 
-                'content': 'content.xml', 
-                'styles': 'styles.xml', 
-                'meta': 'meta.xml',
-                'settings': 'settings.xml'}
-
-    def __init__(self,
-            file='',       # Document file name
-            mimetype='',   # Mimetype string
-            manifest='',   # Lists the contents of the ODF file
-            content='',    # Content data (the text)
-            styles='',     # Formatting data
-            meta='',       # Metadata
-            settings='',   # Application-specific data
-            additional={}, # Additional bundled files (e.g. images)
-            file_dates={}  # File dates for all files and directories
-            ):
-
-        # Get all method parameters
-        args = locals()
-
-        # Process all Document files
-        # TODO: pass xml strings to component constructors
-        for key, filename in self.__class__.file_map.items():
-            if key not in args or 0 == len(args[key]):
-                setattr(self, key, '')
-            elif not filename or '.xml' != filename[-4:]:
-                setattr(self, key, args[key])
-            else:
-                try:
-                    # Parse the XML string and set it as an ElementTree object
-                    setattr(self, key, ET.XML(args[key])) 
-                except Exception, e:
-                    print >>sys.stderr, sysargs[key]
-                    print >>sys.stderr, e
-
-        self.additional = additional
-        self.file_dates = file_dates
-
-        if not hasattr(self, 'file'):
-            self.file = None
-
-    def __del__(self): # XXX is this still necessary?
-        """Clean up.
-        
-        This was originally here to unlink each DOM component.
-        
-        """
-        for key in self.__class__.file_map:
-            attr = getattr(self, key)
-            if not isinstance(attr, basestring):
-                del attr
-
-    # Get non-XML components from the document
-
-    def get_embedded(self, filter=None, ignore_case=False):
-        """Return a dictionary of the objects embedded in the document.
-
-        By default, this should return all embedded objects; the
-        list/dictionary can also be filtered for a certain type, e.g. image
-        files.
-
-        The filter currently supports UNIX glob patterns like "*a[bc]?.png"
-        and/or correct regular expressions like ".*a[bc].\.png$".
-
-        """
-        # TODO: support other embedded objects
-        search = get_search_for_filter(filter, ignore_case)
-        return dict([(filename[9:], content)
-                    for filename, content in self.additional.items()
-                    if 'Pictures/' == filename[:9]
-                    and search(filename[9:])])
-
-    def get_extension(self):
-        """Return ODF extension for given mimetype."""
-        return get_extension(self.mimetype)
-
-    # Convert the document to other formats
-
-    def to_text(self, skip_blank_lines=True):
-        """Return the content of the document as a plain-text Unicode string.
-        
-        Included here as well as in self.content to resemble to_html's usage.
-        
-        """
-        return self.content.to_text()
-
-    def to_html(self, title="", encoding="utf-8"):
-        """Return an UTF-8 encoded HTML representation of the document."""
-        # TODO: 
-        # First, convert to ET operations
-        # Then,
-        # - Scrape up meta tags and add to headnode
-        #     '<meta http-equiv="content-type" content="text/html; charset=UTF-8">'
-        #     '<meta type="Generator" content="python-odftools" />'
-        # - Title for the page, if applicable
-        # - Convert self.styles to CSS and add to headnode as a <style type="text/css"> element
-        #     - see cssutils at the Python cheeseshop
-        # - Fix the unit test
-        #
-        # ENH: 
-        # - Support encodings other than UTF-8, and maybe Unicode
-        # - Allow named elements
-        # - A more natural way of doing the doctype declaration, if possible
-
-        attrs_odf2html = {"style-name": "class"}
-        tags_odf2html = { 
-                "a": "a",
-                "body": "body",
-                "p": "p",
-                "span": "span",
-                "table": "table",
-                "h": "h1",
-                "table-row": "tr",
-                "table-cell": "td",
-                "image": "img",
-                "list": "ol",
-                "list-item": "li" }
-
-        htmldoc = ET.Element("html")
-        headnode = ET.SubElement(htmldoc, "head")
-        titlenode = ET.SubElement(headnode, "title")
-        titlenode.text = title
-        # ENH: add meta etc. nodes to the head as needed
-
-        docbody = self.content.find("office:body")
-        if docbody:
-            bodynode = translate_nodes(docbody, tags_odf2html, attrs_odf2html)
-        else:
-            bodynode = ET.SubElement(htmldoc, "body")
-
-        doctypestr = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">\n'
-        htmlstr = ET.tostring(htmldoc, encoding=encoding) # .split("\n", 1)[1] # XXX kill 1st line?
-        return "\n".join((doctypestr, htmlstr))
-
-
-
-# ----------------------------------------------------------------------------
-# Global functions 
-
-
+# nb: could be inside Document
 def get_extension(mimetype):
     """Return ODF extension for given mimetype."""
     # XXX -- why isn't this part of the Document class?
@@ -316,5 +151,179 @@ def translate_nodes(innode, tag_map, attr_map):
     return outnode
 
 
+# Exceptions for this module
+
+class ReCompileError(Exception):
+    """Thrown if regular expression cannot be compiled."""
+    pass
+
+class PathNotFoundError(Exception):
+    """Thrown if a file reference contains a nonexistant path."""
+    pass
+
+
+# Document base classes
+
+class Document(object):
+    """ The ODF document class -- object model and associated methods.
+
+    Contains the document in memory and is used as the intermediate step for 
+    conversions and transformations.
+
+    This implementation uses the ElementTree module to create and navigate the
+    object. This is built into Python 2.5 and available separately as a standalone
+    module.
+
+    """
+
+    def __init__(self,
+            file=None,     # Document file name
+            mimetype='',   # Mimetype string
+            content='',    # Content data (the text)
+            manifest='',   # Lists the contents of the ODF file
+            meta='',       # Metadata
+            styles='',     # Formatting data
+            settings='',   # Application-specific data
+            additional={}, # Additional bundled files (e.g. images)
+            file_dates={}  # File dates for all files and directories
+            ):
+
+        # Get all method parameters
+        args = locals()
+
+        # Pass XML components to corresponding constructors
+        self.content = Content(content)
+        self.manifest = Manifest(manifest)
+        self.meta = Meta(meta)
+        self.settings = Settings(settings)
+        self.styles = Styles(styles)
+
+        # Remaining components don't need any conversion
+        self.file = file
+        self.mimetype = mimetype
+        self.additional = additional
+        self.file_dates = file_dates
+
+    # Get non-XML components from the document
+
+    def get_embedded(self, filter=None, ignore_case=False):
+        """Return a dictionary of the objects embedded in the document.
+
+        By default, this should return all embedded objects; the
+        list/dictionary can also be filtered for a certain type, e.g. image
+        files.
+
+        The filter currently supports UNIX glob patterns like "*a[bc]?.png"
+        and/or correct regular expressions like ".*a[bc].\.png$".
+
+        """
+        # TODO: support other embedded objects
+        search = get_search_for_filter(filter, ignore_case)
+        return dict([(filename[9:], data)
+                    for filename, data in self.additional.items()
+                    if 'Pictures/' == filename[:9]
+                    and search(filename[9:])])
+
+    def get_extension(self):
+        """Return ODF extension for given mimetype."""
+        return get_extension(self.mimetype)
+
+    # Convert the document to other formats
+
+    def tostring(self, key="content", encoding="utf-8"):
+        """Get the XML representation of the given component."""
+        comp = getattr(self, key)
+        if isinstance(comp, str):
+            return comp.encode(encoding)
+        else:
+            return comp.tostring(encoding=encoding)
+
+    def totext(self, skip_blank_lines=True):
+        """Return the content of the document as a plain-text Unicode string.
+
+        Included here as well as in self.content to resemble to_html's usage.
+
+        """
+        return self.content.totext()
+
+    def tohtml(self, title="", encoding="utf-8"):
+        """Return an UTF-8 encoded HTML representation of the document."""
+        # TODO: 
+        # First, convert to ET operations
+        # Then,
+        # - Scrape up meta tags and add to headnode
+        #     '<meta http-equiv="content-type" content="text/html; charset=UTF-8">'
+        #     '<meta type="Generator" content="python-odftools" />'
+        # - Title for the page, if applicable
+        # - Convert self.styles to CSS and add to headnode as a <style type="text/css"> element
+        #     - see cssutils at the Python cheeseshop
+        # - Fix the unit test
+        #
+        # ENH: 
+        # - Support encodings other than UTF-8, and maybe Unicode
+        # - Allow named elements
+        # - A more natural way of doing the doctype declaration, if possible
+
+        attrs_odf2html = {"style-name": "class"}
+        tags_odf2html = { 
+                "a": "a",
+                "body": "body",
+                "p": "p",
+                "span": "span",
+                "table": "table",
+                "h": "h1",
+                "table-row": "tr",
+                "table-cell": "td",
+                "image": "img",
+                "list": "ol",
+                "list-item": "li" }
+
+        htmldoc = ET.Element("html")
+        headnode = ET.SubElement(htmldoc, "head")
+        titlenode = ET.SubElement(headnode, "title")
+        titlenode.text = title
+        # ENH: add meta etc. nodes to the head as needed
+
+        docbody = self.content.root.find("office:body")
+        if docbody:
+            bodynode = translate_nodes(docbody, tags_odf2html, attrs_odf2html)
+        else:
+            bodynode = ET.SubElement(htmldoc, "body")
+
+        doctypestr = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">\n'
+        htmlstr = ET.tostring(htmldoc, encoding=encoding)
+        return "\n".join((doctypestr, htmlstr))
+
+    # Operations
+
+    def replace(self, search, replace, key="content"):
+        return getattr(self, key).replace(search, replace)
+
+
+class TextDoc(Document):
+    """Textual document."""
+    pass
+
+class SpreadsheetDoc(Document):
+    """Spreadsheet document comprising a series of tables."""
+    pass
+
+class PresentationDoc(Document):
+    """A presentation document, comprising a series of drawings."""
+    pass
+
+class GraphicsDoc(Document):
+    """A drawing on a page."""
+    pass
+
+class ChartDoc(Document):
+    pass
+
+class FormulaDoc(Document):
+    pass
+
+class ImageDoc(Document):
+    pass
+
+
 # vim: et sts=4 sw=4
-#EOF

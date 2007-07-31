@@ -29,6 +29,15 @@ class ReadError(Exception):
 
 # Provide a Pickle-like interface for reading and writing.
 
+# Map attribute names to file names
+file_map = {'mimetype': 'mimetype', 
+            'manifest': 'META-INF/manifest.xml', 
+            'content': 'content.xml', 
+            'styles': 'styles.xml', 
+            'meta': 'meta.xml',
+            'settings': 'settings.xml'}
+
+
 def load(src):
     """Return a Document representing the contents of the ODF file src."""
     try:
@@ -42,7 +51,7 @@ def load(src):
     obj_dict["file_dates"] = {}
     if isinstance(src, basestring) and len(src) < 1000 and os.path.isfile(src):
         obj_dict["file"] = src
-    inverted = dict([(v,k) for k,v in Document.file_map.items()])
+    inverted = dict([(v,k) for k,v in file_map.items()])
     file_dates = {}
 
     for filename in names:
@@ -62,7 +71,7 @@ def dump(doc, dst):
     """Write the ODF content of doc to a Zip file named dst.
 
     The output file is a full ODF file and readable by load() and OOo.
-    
+
     """
     try:
       zf = zipfile.ZipFile(dst, 'w')
@@ -70,20 +79,20 @@ def dump(doc, dst):
       raise WriteError(e)
 
     # Zip document attributes
-    for key, filename in Document.file_map.items():
+    for key, filename in file_map.items():
         if filename:
             zipinfo = zipfile.ZipInfo(filename, doc.file_dates[filename])
-            content = doc.getComponentAsString(key, encoding='utf-8')
-            if len(content) != 0:
+            data = doc.tostring(key, encoding='utf-8')
+            if len(data) != 0:
                 zipinfo.compress_type = zipfile.ZIP_DEFLATED
-            zf.writestr(zipinfo, content)
+            zf.writestr(zipinfo, data)
 
     # Zip additional files
-    for filename, content in doc.additional.items():
+    for filename, data in doc.additional.items():
         zipinfo = zipfile.ZipInfo(filename, doc.file_dates[filename])
-        if len(content) != 0:
+        if len(data) != 0:
             zipinfo.compress_type = zipfile.ZIP_DEFLATED
-        zf.writestr(zipinfo, content)
+        zf.writestr(zipinfo, data)
 
     zf.close()
 
@@ -109,12 +118,12 @@ def dumps(doc):
 
 def OdfToText(filename, skip_blank_lines=True):
     obj = load(filename)
-    return obj.to_text(skip_blank_lines)
+    return obj.totext(skip_blank_lines)
 
 
 def OdfToHtml(filename, title=''):
     obj = load(filename)
-    return obj.to_html(title)
+    return obj.tohtml(title)
 
 
 def OdfToSqlite(filename):
@@ -328,9 +337,8 @@ def main():
     # as long as optional option values and negation are not implemented
     from optparse_optional import OptionalOptionParser
 
-    usage = """%prog [ file1 dir1 dir2/glob*.od? dir3\.*\.od[ts] ] [options]
-
-            %s""" % __doc__
+    usage = "%prog [ file1 dir1 dir2/glob*.od? dir3\.*\.od[ts] ] [options]\n"
+    usage += __doc__
 
     parser = OptionalOptionParser(usage)
 
@@ -500,11 +508,11 @@ def main():
                 changed = doc.replace(options.replace[0], options.replace[1])
 
             if parser.is_true(options.totxt):
-                content['txt'] = doc.toText()
+                content['txt'] = doc.totext()
             if parser.is_true(options.tohtml):
-                content['html'] = doc.toHtml(os.path.basename(infile))
+                content['html'] = doc.tohtml(os.path.basename(infile))
             if parser.is_true(options.toxml):
-                content['xml'] = doc.toXml(encoding='utf-8')
+                content['xml'] = doc.content.tostring(encoding='utf-8')
             if parser.is_true(options.toodf) or (changed and not content):
                 content['odf'] = dumps(doc)
             if parser.is_true(options.list_author):

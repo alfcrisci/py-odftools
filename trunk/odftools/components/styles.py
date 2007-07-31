@@ -1,7 +1,5 @@
 # -*- coding: iso-8859-15 -*-
 
-"""Style definitions component of the document."""
-
 import os, sys
 
 try:
@@ -9,20 +7,12 @@ try:
 except ImportError:
     from elementtree.cElementTree import ElementTree as ET
 
+from component import Component
 
 
-class Styles(object):
-
-    def __init__(self, text):
-        self.root = ET.fromstring(text)
-
-    # Convert the document to other formats
-
-    def to_xml(self, pretty_printing=False, encoding=None):
-        """Return the content of the document as a XML Unicode string."""
-        if pretty_printing:
-            return self.root.toprettyxml(encoding)
-        return self.content.toxml(encoding)
+class Styles(Component):
+    """Style definitions component of the document."""
+    pass
 
 
 class _Style(object):

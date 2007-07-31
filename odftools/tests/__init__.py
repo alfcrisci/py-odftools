@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
-#
-# vim: et sts=4 sw=4
 
 """Declares the filenames and basic operations for the tests in test_odf.py.
 
@@ -26,6 +24,7 @@ else:
 sys.path.append(os.path.dirname(td))
 
 import odf, document, diff
+
 
 class TestCaseOdftools(unittest.TestCase):
     """A test case for odftools."""
@@ -95,3 +94,5 @@ def run_tests():
 
 if __name__ == "__main__":
     run_tests()
+
+# vim: et sts=4 sw=4

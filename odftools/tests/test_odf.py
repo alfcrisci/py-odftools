@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-15 -*-
-#
-# vim: et sts=4 sw=4
+
 
 """Runs the specific unit tests for this module.
 
 This file uses classes and filenames defined in __init__.py.
 
 """
+
+# NB:
+# before printing or writing to a file, unicode characters should be encoded properly
+# f.write(doc.toText().encode('latin_1', 'xmlcharrefreplace'))
 
 import os, tempfile
 
@@ -42,19 +45,19 @@ class TestCaseText(TestCaseOdfText):
 
     def test_text(self):
         doc = odf.load(self.file)
-        text = doc.toText()
+        text = doc.totext()
         self.assertTrue(simple_text in text)
 
     def test_html(self):
         doc = odf.load(self.file)
-        html = doc.toHtml()
+        html = doc.tohtml()
         self.assertTrue(simple_html in html)
 
     def test_replace(self):
         doc = odf.load(self.file)
         s = self._random_string()
         doc.replace(simple_text, s)
-        text = doc.toText()
+        text = doc.totext()
         self.assertFalse(simple_text in text)
         self.assertTrue(s in text)
 
@@ -114,12 +117,12 @@ class TestCaseImages(TestCaseOdfImages):
     def test_images(self):
         doc = odf.load(self.file)
 
-        self.assertEqual(len(doc.getEmbeddedObjects()), 2)
-        self.assertEqual(len(doc.getEmbeddedObjects('1')), 2)
-        self.assertEqual(len(doc.getEmbeddedObjects('10*F.gif')), 1)
-        self.assertEqual(len(doc.getEmbeddedObjects('*?.gif')), 1)
-        self.assertRaises(document.ReCompileError, doc.getEmbeddedObjects, r'*\.png')
-        self.assertEqual(len(doc.getEmbeddedObjects(r'10.*D.*\.png')), 1)
+        self.assertEqual(len(doc.get_embedded()), 2)
+        self.assertEqual(len(doc.get_embedded('1')), 2)
+        self.assertEqual(len(doc.get_embedded('10*F.gif')), 1)
+        self.assertEqual(len(doc.get_embedded('*?.gif')), 1)
+        self.assertRaises(document.ReCompileError, doc.get_embedded, r'*\.png')
+        self.assertEqual(len(doc.get_embedded(r'10.*D.*\.png')), 1)
 
 
 class TestCaseFormatting(TestCaseOdfText):
@@ -127,12 +130,12 @@ class TestCaseFormatting(TestCaseOdfText):
 
     def test_text(self):
         doc = odf.load(self.file)
-        text = doc.toText()
+        text = doc.totext()
         self.assertTrue(formatted_text in text)
 
     def test_html(self):
         doc = odf.load(self.file)
-        html = doc.toHtml()
+        html = doc.tohtml()
         self.assertTrue(formatted_html in html)
 
 
@@ -348,5 +351,4 @@ formatted_html = """<html>
 
 
 
-# before printing or writing to a file, unicode characters should be encoded properly
-# f.write(doc.toText().encode('latin_1', 'xmlcharrefreplace'))
+# vim: et sts=4 sw=4

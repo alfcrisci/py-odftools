@@ -126,39 +126,6 @@ def OdfToHtml(filename, title=''):
     return obj.tohtml(title)
 
 
-def OdfToSqlite(filename):
-    """Return SQLite binary string of the zipped OpenDocument file."""
-    try:
-        from sqlite3 import dbapi2 as sqlite    # Python25
-    except ImportError:
-        from pysqlite2 import dbapi2 as sqlite  # Python24 and pysqlite
-
-    try:
-        f = open(filename,'rb')
-    except IOError, e:
-        raise ReadError(e)
-
-    doc = f.read()
-    f.close()
-    return sqlite.Binary(doc)
-
-
-def SqlToOdf(blob, filename=None):
-    """Save binary string blob containing a zipped OpenDocument into filename.
-
-    Return a corresponding Document if filename is None.
-
-    """
-    if filename is None:
-        return loads(blob)
-
-    try:
-        f = open(filename,'wb')
-    except IOError, e:
-        raise WriteError(e)
-
-    f.write(blob)
-    f.close()
 
 # Path navigation
 # (These are useful on Windows where the command shell is weak.)
@@ -395,9 +362,6 @@ def main():
                         [optional argument: output FILE].")
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                         help="Print verbose status messages.")
-
-    # TODO: options.pipe ? Read one file from stdin and write to stdout
-    # TODO: options.encoding
 
     # Encoding der Standardausgabe und des Dateisystems herausfinden
     # http://wiki.python.de/Von_Umlauten%2C_Unicode_und_Encodings
